@@ -106,17 +106,6 @@ class UpdateEmployeeDto {
   @IsOptional() @IsEnum(['active', 'inactive']) status?: 'active' | 'inactive';
 }
 
-// --- Auth DTOs ---
-
-class LoginDto {
-  @IsEmail() email!: string;
-  @IsString() password!: string;
-}
-
-class RefreshTokenDto {
-  @IsString() refreshToken!: string;
-}
-
 // --- Supabase Service ---
 
 @Injectable()
@@ -167,7 +156,7 @@ class EmployeeController {
       id: "2", firstName: "Juan", lastName: "Dela Cruz", email: "juan.dc@talibon.gov.ph", 
       department: "Administrative" as any, position: "Senior Analyst", salary: 45000, 
       hireDate: "2020-01-15", role: 'admin', status: 'active', employmentStatus: 'Regular',
-      govIds: {}, leaveBalances: { vacation: 15, sick: 15, emergency: 5 }
+      govIds: { sss: "", philhealth: "", pagibig: "", tin: "" }, leaveBalances: { vacation: 15, sick: 15, emergency: 5 }
     },
   ];
 
@@ -175,8 +164,30 @@ class EmployeeController {
   async findAll() {
     const client = this.supabase.getClient();
     if (client) {
-      const { data, error } = await client.from("employees").select("*").order('created_at', { ascending: false });
-      if (!error) return wrap(data);
+      const { data, error } = await client
+        .from("employees")
+        .select("*")
+        .order('created_at', { ascending: false });
+      
+      if (!error) {
+        return wrap(data.map(row => ({
+          id: row.id,
+          firstName: row.first_name,
+          lastName: row.last_name,
+          email: row.email,
+          department: row.department,
+          position: row.position,
+          salary: row.salary,
+          hireDate: row.hire_date,
+          role: row.role,
+          status: row.status,
+          employmentStatus: row.employment_status,
+          sss: row.sss,
+          philhealth: row.philhealth,
+          pagibig: row.pagibig,
+          tin: row.tin,
+        })));
+      }
       this.logger.error(`Supabase Fetch Error: ${error.message}`);
     }
     return wrap(this.mockEmployees);
@@ -186,7 +197,23 @@ class EmployeeController {
   async create(@Body() dto: CreateEmployeeDto) {
     const client = this.supabase.getClient();
     if (client) {
-      const { data, error } = await client.from("employees").insert([dto]).select();
+      const payload = {
+        first_name: dto.firstName,
+        last_name: dto.lastName,
+        email: dto.email,
+        department: dto.department,
+        position: dto.position,
+        salary: dto.salary,
+        hire_date: dto.hireDate,
+        role: dto.role,
+        employment_status: dto.employmentStatus,
+        status: 'active',
+        sss: dto.govIds?.sss,
+        philhealth: dto.govIds?.philhealth,
+        pagibig: dto.govIds?.pagibig,
+        tin: dto.govIds?.tin,
+      };
+      const { data, error } = await client.from("employees").insert([payload]).select();
       if (!error) return wrap(data[0], "Employee profile created");
       throw new BadRequestException(error.message);
     }
@@ -199,7 +226,18 @@ class EmployeeController {
   async update(@Param("id") id: string, @Body() dto: UpdateEmployeeDto) {
     const client = this.supabase.getClient();
     if (client) {
-      const { data, error } = await client.from("employees").update(dto).eq("id", id).select();
+      const payload: any = {};
+      if (dto.firstName) payload.first_name = dto.firstName;
+      if (dto.lastName) payload.last_name = dto.lastName;
+      if (dto.email) payload.email = dto.email;
+      if (dto.department) payload.department = dto.department;
+      if (dto.position) payload.position = dto.position;
+      if (dto.salary) payload.salary = dto.salary;
+      if (dto.hireDate) payload.hire_date = dto.hireDate;
+      if (dto.role) payload.role = dto.role;
+      if (dto.status) payload.status = dto.status;
+
+      const { data, error } = await client.from("employees").update(payload).eq("id", id).select();
       if (!error) return wrap(data[0], "Employee profile updated");
       throw new BadRequestException(error.message);
     }
@@ -231,8 +269,27 @@ class PayrollController {
   async findAll() {
     const client = this.supabase.getClient();
     if (client) {
-      const { data, error } = await client.from("payroll").select("*, employees(firstName, lastName)");
-      if (!error) return wrap(data);
+      const { data, error } = await client.from("payroll_records").select("*, employees(first_name, last_name)");
+      if (!error) return wrap(data.map(row => ({
+         id: row.id,
+         employeeId: row.employee_id,
+         period: row.period,
+         basicSalary: row.basic_salary,
+         hazardAllowance: row.hazard_allowance,
+         bonusAllowance: row.bonus_allowance,
+         otherAllowance: row.other_allowance,
+         sssDeduction: row.sss_deduction,
+         philhealthDeduction: row.philhealth_deduction,
+         pagibigDeduction: row.pagibig_deduction,
+         taxDeduction: row.tax_deduction,
+         latePenalty: row.late_penalty,
+         overtimePay: row.overtime_pay,
+         grossPay: row.gross_pay,
+         netPay: row.net_pay,
+         status: row.status,
+         processedAt: row.processed_at,
+         employeeName: row.employees ? `${row.employees.first_name} ${row.employees.last_name}` : 'Unknown'
+      })));
     }
     return wrap([]);
   }
@@ -241,7 +298,24 @@ class PayrollController {
   async create(@Body() dto: CreatePayrollDto) {
     const client = this.supabase.getClient();
     if (client) {
-      const { data, error } = await client.from("payroll").insert([dto]).select();
+      const payload = {
+         employee_id: dto.employeeId,
+         period: dto.period,
+         basic_salary: dto.basicSalary,
+         hazard_allowance: dto.allowances?.hazard,
+         bonus_allowance: dto.allowances?.bonus,
+         other_allowance: dto.allowances?.other,
+         sss_deduction: dto.deductions?.sss,
+         philhealth_deduction: dto.deductions?.philhealth,
+         pagibig_deduction: dto.deductions?.pagibig,
+         tax_deduction: dto.deductions?.tax,
+         late_penalty: dto.deductions?.latePenalty,
+         overtime_pay: dto.overtimePay,
+         gross_pay: dto.grossPay,
+         net_pay: dto.netPay,
+         status: dto.status
+      };
+      const { data, error } = await client.from("payroll_records").insert([payload]).select();
       if (!error) return wrap(data[0]);
       throw new BadRequestException(error.message);
     }
@@ -258,8 +332,18 @@ class LeaveController {
   async findAll() {
     const client = this.supabase.getClient();
     if (client) {
-      const { data, error } = await client.from("leave_requests").select("*").order('requestedAt', { ascending: false });
-      if (!error) return wrap(data);
+      const { data, error } = await client.from("leave_requests").select("*").order('requested_at', { ascending: false });
+      if (!error) return wrap(data.map(row => ({
+         id: row.id,
+         employeeId: row.employee_id,
+         type: row.type,
+         startDate: row.start_date,
+         endDate: row.end_date,
+         reason: row.reason,
+         status: row.status,
+         requestedAt: row.requested_at,
+         remarks: row.remarks
+      })));
     }
     return wrap([]);
   }
@@ -268,7 +352,15 @@ class LeaveController {
   async create(@Body() dto: CreateLeaveDto) {
     const client = this.supabase.getClient();
     if (client) {
-      const { data, error } = await client.from("leave_requests").insert([{ ...dto, status: 'pending', requestedAt: new Date().toISOString() }]).select();
+      const payload = {
+         employee_id: dto.employeeId,
+         type: dto.type,
+         start_date: dto.startDate,
+         end_date: dto.endDate,
+         reason: dto.reason,
+         status: 'pending'
+      };
+      const { data, error } = await client.from("leave_requests").insert([payload]).select();
       if (!error) return wrap(data[0]);
     }
     return wrap({ ...dto, id: `LV-${Date.now()}`, status: 'pending', requestedAt: new Date().toISOString() });
@@ -278,7 +370,7 @@ class LeaveController {
   async updateStatus(@Param("id") id: string, @Body() dto: UpdateLeaveDto) {
     const client = this.supabase.getClient();
     if (client) {
-      const { data, error } = await client.from("leave_requests").update(dto).eq("id", id).select();
+      const { data, error } = await client.from("leave_requests").update({ status: dto.status, remarks: dto.remarks }).eq("id", id).select();
       if (!error) return wrap(data[0]);
     }
     return wrap({ id, ...dto }, "Leave request status updated");
@@ -288,31 +380,111 @@ class LeaveController {
 @Controller("api/attendance")
 @UsePipes(new ValidationPipe({ transform: true }))
 class AttendanceController {
+  private readonly logger = new Logger(AttendanceController.name);
   constructor(@Inject(SupabaseService) private readonly supabase: SupabaseService) {}
 
   @Get()
   async findAll() {
+    const client = this.supabase.getClient();
+    if (client) {
+      const { data, error } = await client
+        .from("attendance_records")
+        .select("*, employees(first_name, last_name)")
+        .order('date', { ascending: false })
+        .order('time_in', { ascending: false });
+      if (!error) return wrap(data.map(row => ({
+         id: row.id,
+         employeeId: row.employee_id,
+         date: row.date,
+         timeIn: row.time_in,
+         timeOut: row.time_out,
+         totalHours: row.total_hours,
+         status: row.status,
+         employeeName: row.employees ? `${row.employees.first_name} ${row.employees.last_name}` : 'Unknown'
+      })));
+      this.logger.error(`Supabase Attendance Fetch Error: ${error.message}`);
+    }
     return wrap([]);
   }
 
   @Post("log")
   async log(@Body() dto: CreateAttendanceDto) {
+    const client = this.supabase.getClient();
+    if (client) {
+      const { data: existing, error: fetchError } = await client
+        .from("attendance_records")
+        .select("*")
+        .eq("employee_id", dto.employeeId)
+        .eq("date", dto.date)
+        .is("time_out", null)
+        .single();
+
+      if (!fetchError && existing) {
+        const timeOut = new Date().toISOString();
+        const timeInDate = new Date(existing.time_in);
+        const timeOutDate = new Date(timeOut);
+        const hours = Math.round((timeOutDate.getTime() - timeInDate.getTime()) / (1000 * 60 * 60) * 100) / 100;
+
+        const { data, error } = await client
+          .from("attendance_records")
+          .update({ time_out: timeOut, total_hours: hours })
+          .eq("id", existing.id)
+          .select();
+        
+        if (!error) return wrap(data[0], "Attendance record updated (Clock Out)");
+      }
+
+      const { data, error } = await client
+        .from("attendance_records")
+        .insert([{ 
+          employee_id: dto.employeeId,
+          date: dto.date,
+          time_in: dto.timeIn,
+          status: 'present'
+        }])
+        .select();
+      
+      if (!error) return wrap(data[0], "Attendance record updated (Clock In)");
+      throw new BadRequestException(error.message);
+    }
     return wrap({ ...dto, id: `ATT-${Date.now()}`, status: 'present', totalHours: 0 });
   }
 }
 
 @Controller("api/audit")
 class AuditController {
+  private readonly logger = new Logger(AuditController.name);
   constructor(@Inject(SupabaseService) private readonly supabase: SupabaseService) {}
 
   @Get()
   async findAll() {
+    const client = this.supabase.getClient();
+    if (client) {
+      const { data, error } = await client
+        .from("audit_logs")
+        .select("*")
+        .order('timestamp', { ascending: false });
+      if (!error) return wrap(data);
+      this.logger.error(`Supabase Audit Fetch Error: ${error.message}`);
+    }
     return wrap([]);
   }
 
   @Post()
   async create(@Body() dto: CreateAuditDto) {
-    return wrap({ ...dto, id: `LOG-${Date.now()}`, timestamp: new Date().toISOString() });
+    const client = this.supabase.getClient();
+    
+    if (client) {
+      const payload = {
+         user_id: dto.userId,
+         user_name: dto.userName,
+         action: dto.action,
+         target: dto.target
+      };
+      const { data, error } = await client.from("audit_logs").insert([payload]).select();
+      if (!error) return wrap(data[0]);
+    }
+    return wrap({ ...dto, timestamp: new Date().toISOString(), id: `LOG-${Date.now()}` });
   }
 }
 
@@ -326,85 +498,8 @@ class NotificationController {
   }
 }
 
-@Controller("api/auth")
-@UsePipes(new ValidationPipe({ transform: true }))
-class AuthController {
-  private readonly logger = new Logger(AuthController.name);
-
-  // Mock user database
-  private mockUsers = [
-    {
-      id: "1",
-      email: "admin@talibon.ph",
-      password: "password", // In production, use bcrypt
-      firstName: "Admin",
-      lastName: "User",
-      role: 'admin' as Role,
-      department: "Administrative" as any,
-      position: "System Administrator",
-      salary: 150000,
-      hireDate: "2020-01-01",
-      status: 'active' as const,
-      employmentStatus: 'Regular' as const,
-      govIds: {},
-      leaveBalances: { vacation: 15, sick: 15, emergency: 5 }
-    }
-  ];
-
-  @Post("login")
-  async login(@Body() dto: LoginDto) {
-    const user = this.mockUsers.find(u => u.email === dto.email);
-    
-    if (!user || user.password !== dto.password) {
-      throw new BadRequestException("Invalid email or password");
-    }
-
-    // In production, issue JWT tokens
-    const token = `token-${user.id}-${Date.now()}`;
-    const refreshToken = `refresh-${user.id}-${Date.now()}`;
-
-    this.logger.log(`User ${user.email} logged in`);
-
-    return wrap(
-      {
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          role: user.role,
-          department: user.department,
-          position: user.position,
-        },
-        token,
-        refreshToken,
-      },
-      "Login successful"
-    );
-  }
-
-  @Post("logout")
-  async logout() {
-    return wrap({}, "Logout successful");
-  }
-
-  @Post("refresh")
-  async refresh(@Body() dto: RefreshTokenDto) {
-    // In production, validate refresh token
-    const token = `token-refreshed-${Date.now()}`;
-    return wrap({ token }, "Token refreshed");
-  }
-
-  @Get("me")
-  async getCurrentUser(@Body() user: any) {
-    // In production, extract user from request context
-    return wrap(this.mockUsers[0]);
-  }
-}
-
 @Module({
   controllers: [
-    AuthController,
     EmployeeController, 
     PayrollController, 
     LeaveController, 

@@ -1,337 +1,265 @@
-import React, { useState } from 'react';
-import {
-  LayoutDashboard,
-  Users,
-  CreditCard,
-  Building2,
-  Shield,
-  Briefcase,
-  Bell,
-  LogOut,
-  Sparkles,
-  Clock,
+import { useState, useEffect } from 'react';
+import { 
+  LayoutDashboard, Users, CreditCard, Plus, Trash2, Edit2, Search, Building2, 
+  Calendar, Mail, DollarSign, ChevronRight, LogIn, Shield, UserCircle, 
+  Briefcase, Bell, LogOut, Copy, Sparkles, PlayCircle, Clock, ChevronDown, 
+  Globe, Accessibility, Moon, Sun, Menu, X, FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Employee, Role } from './types';
-import { EmployeeAPI, AuditAPI } from './lib/api';
+import { Employee, PayrollRecord, DEPARTMENTS, Role, AttendanceRecord, AuditLog } from './types';
 import { cn, formatDate } from './lib/utils';
-import { useAuth, ProtectedFeature } from './contexts/AuthContext';
-import { useToast } from './contexts/ToastContext';
-import { validateEmployeeForm } from './lib/validation';
 
 // Components
-import LoginPage from './components/LoginPage';
 import EmployeeList from './components/EmployeeList';
 import PayrollManagement from './components/PayrollManagement';
 import Dashboard from './components/Dashboard';
 import LeaveManagement from './components/LeaveManagement';
 import AttendanceTracker from './components/AttendanceTracker';
 import AuditLogs from './components/AuditLogs';
-import {
-  EmployeeListSkeleton,
-  LoadingOverlay,
-  ErrorState,
-  EmptyState,
-} from './components/LoadingSkeletons';
+import SelfServicePortal from './components/SelfServicePortal';
+import ReportGenerator from './components/ReportGenerator';
+import Login from './components/Login';
+import { SupabaseService, supabase } from './lib/supabaseService';
 
-// ============================================
-// TYPES
-// ============================================
-
-type ActiveTab = 'dashboard' | 'employees' | 'payroll' | 'leave' | 'attendance' | 'audit';
-
-// ============================================
-// APP CONTENT
-// ============================================
-
-function AppContent() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
-  const { currentUser, currentRole, isAuthenticated, isLoading: authLoading, logout, hasPermission } =
-    useAuth();
-  const { addToast } = useToast();
+export default function App() {
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'employees' | 'payroll' | 'leave' | 'attendance' | 'audit' | 'inquiry' | 'reports'>('dashboard');
+  const [currentUser, setCurrentUser] = useState<Employee | null>(null);
+  const [isHrisActive, setIsHrisActive] = useState(true);
   const queryClient = useQueryClient();
 
-  // ── Auth guard ─────────────────────────────────────────────────────────────
-  if (authLoading) return <LoadingOverlay />;
-  if (!isAuthenticated) return <LoginPage />;
+  const currentUserRole = currentUser?.role || 'employee';
 
-  // ── Data fetching ──────────────────────────────────────────────────────────
-  const {
-    data: employeeResponse,
-    isLoading: employeeLoading,
-    isError: employeeError,
-    error: employeeErrorDetails,
-    refetch: refetchEmployees,
-  } = useQuery({
-    queryKey: ['employees'],
-    queryFn: async () => {
-      const res = await EmployeeAPI.list();
-      return res;
-    },
-    retry: 2,
-    staleTime: 1000 * 60 * 5,
-  });
-
-  const {
-    data: attendanceResponse,
-    isError: attendanceError,
-    refetch: refetchAttendance,
-  } = useQuery({
-    queryKey: ['attendance'],
-    queryFn: async () => {
-      const res = await EmployeeAPI.list(); // TODO: replace with AttendanceAPI.list()
-      return res;
-    },
-    staleTime: 1000 * 60 * 1,
-  });
-
-  const {
-    data: auditResponse,
-    isError: auditError,
-    refetch: refetchAudit,
-  } = useQuery({
-    queryKey: ['audit'],
-    queryFn: async () => {
-      const res = await AuditAPI.list({ limit: 100 });
-      return res;
-    },
-    staleTime: 1000 * 30,
-  });
-
-  const employees: Employee[] = Array.isArray((employeeResponse as any)?.data)
-    ? (employeeResponse as any).data
-    : [];
-  const attendanceRecords = Array.isArray((attendanceResponse as any)?.data)
-    ? (attendanceResponse as any).data
-    : [];
-  const auditLogs = Array.isArray((auditResponse as any)?.data) ? (auditResponse as any).data : [];
-
-  // ── Audit helper ───────────────────────────────────────────────────────────
-  const logAudit = (action: string, target: string) => {
-    if (!currentUser) return;
-    AuditAPI.log({
-      userId: currentUser.id,
-      userName: `${currentUser.first_name} ${currentUser.last_name}`,
-      action,
-      target,
-    }).catch(() => {/* swallow audit errors */});
+  const handleLogout = () => {
+    if (currentUser) {
+       SupabaseService.audit.log({
+          userId: currentUser.id,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'LOGOUT_SUCCESS',
+          target: 'Authentication Terminal'
+       });
+    }
+    setCurrentUser(null);
+    setActiveTab('dashboard');
   };
 
-  // ── Mutations ──────────────────────────────────────────────────────────────
+  // Real-time Data Sync (Live Feed)
+  useEffect(() => {
+    const channel = supabase
+      .channel('hris-live-all')
+      .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+        // Invalidate appropriate queries based on the table changed
+        if (payload.table === 'employees') queryClient.invalidateQueries({ queryKey: ['employees'] });
+        if (payload.table === 'attendance_records') queryClient.invalidateQueries({ queryKey: ['attendance'] });
+        if (payload.table === 'audit_logs') queryClient.invalidateQueries({ queryKey: ['audit'] });
+        if (payload.table === 'payroll_records') queryClient.invalidateQueries({ queryKey: ['payroll'] });
+        if (payload.table === 'leave_requests') queryClient.invalidateQueries({ queryKey: ['leaves'] });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
+  // Enterprise Data Orchestration (Supabase Direct)
+  const { data: employeeResponse, isLoading: employeeLoading } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => SupabaseService.employees.list(),
+  });
+
+  const { data: attendanceResponse } = useQuery({
+    queryKey: ['attendance'],
+    queryFn: () => SupabaseService.attendance.list(),
+  });
+
+  const { data: auditResponse } = useQuery({
+    queryKey: ['audit'],
+    queryFn: () => SupabaseService.audit.list(),
+  });
+
+  const { data: payrollResponse } = useQuery({
+    queryKey: ['payroll'],
+    queryFn: () => SupabaseService.payroll.list(),
+  });
+
+  const { data: leaveResponse } = useQuery({
+    queryKey: ['leaves'],
+    queryFn: () => SupabaseService.leaves.list(),
+  });
+
+  const employees = (employeeResponse?.data || []) as Employee[];
+  const attendanceRecords = (attendanceResponse?.data || []) as AttendanceRecord[];
+  const auditLogs = (auditResponse?.data || []) as AuditLog[];
+  const payrollRecords = (payrollResponse?.data || []) as PayrollRecord[];
+
   const addMutation = useMutation({
-    mutationFn: async (newEmp: Omit<Employee, 'id'>) => {
-      // Map from component form shape to validation shape
-      const validation = validateEmployeeForm({
-        firstName: newEmp.first_name,
-        lastName: newEmp.last_name,
-        email: newEmp.email,
-        position: newEmp.position,
-        department: newEmp.department,
-        salary: newEmp.salary,
-        hireDate: newEmp.hire_date,
-        employmentStatus: newEmp.employment_status,
-      });
-      if (!validation.isValid) throw new Error(validation.errors[0].message);
-      const res = await EmployeeAPI.create(newEmp);
-      return (res as any).data;
-    },
-    onSuccess: (data: Employee) => {
-      addToast('Employee added successfully.', 'success');
-      queryClient.invalidateQueries({ queryKey: ['employees'] });
-      logAudit('CREATE', `Employee: ${data?.first_name} ${data?.last_name}`);
-    },
-    onError: (err: Error) => addToast(err.message ?? 'Failed to add employee.', 'error'),
+    mutationFn: (newEmp: any) => SupabaseService.employees.create(newEmp),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['employees'] }),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await EmployeeAPI.delete(id);
-      return id;
-    },
-    onSuccess: (id) => {
-      addToast('Employee removed successfully.', 'success');
-      queryClient.invalidateQueries({ queryKey: ['employees'] });
-      logAudit('DELETE', `Employee ID: ${id}`);
-    },
-    onError: (err: Error) => addToast(err.message ?? 'Failed to delete employee.', 'error'),
+    mutationFn: (id: string) => SupabaseService.employees.delete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['employees'] }),
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<Employee> }) => {
-      const res = await EmployeeAPI.update(id, data);
-      return (res as any).data;
-    },
-    onSuccess: (data: Employee) => {
-      addToast('Employee updated successfully.', 'success');
-      queryClient.invalidateQueries({ queryKey: ['employees'] });
-      logAudit('UPDATE', `Employee ID: ${data?.id}`);
-    },
-    onError: (err: Error) => addToast(err.message ?? 'Failed to update employee.', 'error'),
+    mutationFn: ({ id, data }: { id: string; data: any }) => SupabaseService.employees.update(id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['employees'] }),
   });
 
-  // ── Handlers ───────────────────────────────────────────────────────────────
-  const handleAddEmployee = (employee: Omit<Employee, 'id'>) => {
-    addMutation.mutate(employee);
+  const handleAddEmployee = async (employee: Omit<Employee, 'id'>) => {
+    addMutation.mutate({ ...employee, role: 'employee' });
   };
 
-  const handleDeleteEmployee = (id: string) => {
-    if (!window.confirm('Permanently delete this employee record?')) return;
+  const handleDeleteEmployee = async (id: string) => {
     deleteMutation.mutate(id);
   };
 
-  const handleUpdateEmployee = (id: string, data: Partial<Employee>) => {
+  const handleUpdateEmployee = async (id: string, data: Partial<Employee>) => {
     updateMutation.mutate({ id, data });
   };
 
   const handleAttendanceLog = async (type: 'in' | 'out') => {
+    if (!currentUser) return;
     try {
-      // TODO: replace stub with AttendanceAPI.log(currentUser!.id, type)
-      await EmployeeAPI.list();
+      await SupabaseService.attendance.log(currentUser.id, type);
       queryClient.invalidateQueries({ queryKey: ['attendance'] });
-      addToast(`Time-${type} recorded.`, 'success');
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to log attendance.';
-      addToast(msg, 'error');
+      // Add audit log for attendance
+      await SupabaseService.audit.log({
+        userId: currentUser.id,
+        userName: `${currentUser.firstName} ${currentUser.lastName}`,
+        action: `Attendance ${type === 'in' ? 'Clock In' : 'Clock Out'}`,
+        target: 'attendance_records'
+      });
+    } catch (err) {
+      console.error("Attendance Log Error:", err);
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } catch {
-      addToast('Logout failed. Please try again.', 'error');
-    }
-  };
+  if (!currentUser) {
+    return <Login onLogin={setCurrentUser} />;
+  }
 
-  // ── Nav items ──────────────────────────────────────────────────────────────
-  const navItems: Array<{ id: ActiveTab; label: string; icon: React.FC<{ size?: number; className?: string }>; requiredRoles?: Role[] }> = [
-    { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
-    { id: 'employees', label: 'Personnel', icon: Users, requiredRoles: ['admin', 'dept_head'] },
-    { id: 'attendance', label: 'Attendance', icon: Clock },
-    { id: 'payroll', label: 'Financial', icon: CreditCard, requiredRoles: ['admin', 'payroll_officer'] },
-    { id: 'leave', label: 'Mobility', icon: Briefcase },
-    { id: 'audit', label: 'Audit', icon: Shield, requiredRoles: ['admin'] },
-  ];
-
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col min-h-screen font-sans text-slate-900 overflow-hidden relative">
-      {/* ── Floating Navigation ── */}
-      <header
-        className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-4 px-6 py-2 bg-slate-900/95 backdrop-blur-3xl rounded-full shadow-2xl border border-white/10"
-        role="banner"
-      >
-        {/* Logo */}
-        <button
-          className="flex items-center gap-3 pr-4 border-r border-white/10 group"
-          onClick={() => setActiveTab('dashboard')}
-          aria-label="Go to dashboard"
-        >
-          <div className="w-8 h-8 bg-talibon-red rounded-lg flex items-center justify-center text-white transition-transform group-hover:scale-110">
-            <Building2 size={16} />
-          </div>
-          <div className="hidden sm:block">
-            <h1 className="text-[10px] font-black text-white leading-none tracking-tight">TALIBON</h1>
-            <p className="text-[7px] font-black text-white/40 uppercase tracking-widest mt-1">HRIS</p>
-          </div>
-        </button>
+    <div className="flex flex-col min-h-screen font-sans text-slate-900 bg-slate-50">
+      
+      {/* 1. COMPACT TALIBON IDENTITY BANNER */}
+      <div className="relative h-20 md:h-24 overflow-hidden border-b border-slate-200 flex items-center px-4 md:px-10 bg-slate-900 print:hidden">
+        <img 
+          src="https://o.quizlet.com/SNIDgtNdT.vIbVLCAYqOGA.jpg"
+          alt="Talibon Municipal Hall"
+          referrerPolicy="no-referrer"
+          className="absolute inset-0 w-full h-full object-cover opacity-40 grayscale"
+          onError={(e) => {
+            e.currentTarget.src = 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?auto=format&fit=crop&q=80&w=2000';
+          }}
+        />
+        <div className="absolute inset-0 bg-slate-900/60" />
 
-        {/* Nav Links */}
-        <nav className="flex items-center gap-1" role="navigation" aria-label="Main navigation">
-          {navItems.map((item) => {
-            if (item.requiredRoles && !hasPermission(item.requiredRoles)) return null;
-            const isActive = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={cn(
-                  'flex items-center gap-2 px-4 py-2.5 rounded-full transition-all text-[9.5px] font-bold uppercase tracking-wider whitespace-nowrap',
-                  isActive
-                    ? 'bg-white text-slate-900 shadow-xl'
-                    : 'text-white/50 hover:text-white hover:bg-white/10',
-                )}
-                aria-current={isActive ? 'page' : undefined}
-              >
-                <item.icon size={14} className={isActive ? 'text-talibon-red' : ''} />
-                {item.label}
-              </button>
-            );
-          })}
-        </nav>
+        <div className="max-w-7xl mx-auto w-full flex items-center justify-between relative z-10">
+           {/* Left: Branding */}
+           <div className="flex items-center gap-4">
+              <div className="w-12 h-12 md:w-14 md:h-14 rounded-lg bg-white flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+                 <img 
+                    src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ6JGnJT_02yLTv70U9qTCxC8SZY15G44MHUw&s"
+                    onError={(e) => { e.currentTarget.src = 'https://placehold.co/400x400/D92E2E/white?text=Talibon+Seal'; }}
+                    className="w-full h-full object-contain p-1" 
+                    alt="Talibon Seal"
+                 />
+              </div>
+              <div>
+                 <h1 className="text-lg md:text-xl font-bold text-white tracking-tight uppercase leading-none">
+                    Municipality of Talibon
+                 </h1>
+                 <p className="text-slate-400 text-[8px] font-bold tracking-[0.4em] mt-1.5 flex items-center gap-2">
+                    <span className="w-1 h-1 bg-talibon-red rounded-full"></span> HUMAN RESOURCE INTELLIGENCE SYSTEM
+                 </p>
+              </div>
+           </div>
 
-        {/* Right controls */}
-        <div className="flex items-center gap-1.5 pl-4 border-l border-white/10">
-          <button
-            className="w-8 h-8 flex items-center justify-center text-white/40 hover:text-white transition-all rounded-full hover:bg-white/10"
-            aria-label="Notifications"
-            title="Notifications (coming soon)"
-          >
-            <Bell size={14} />
-          </button>
-          <button
-            className="w-8 h-8 flex items-center justify-center text-white bg-indigo-600 rounded-full shadow-lg shadow-indigo-600/30 hover:scale-110 transition-all"
-            aria-label="AI Assistant"
-            title="AI Assistant (coming soon)"
-          >
-            <Sparkles size={14} />
-          </button>
-          <div className="w-8 h-8 bg-talibon-orange rounded-full flex items-center justify-center text-white text-[8px] font-black border-2 border-white/10 uppercase select-none">
-            {currentUser?.first_name?.slice(0, 1)}
-            {currentUser?.last_name?.slice(0, 1)}
-          </div>
-          <button
-            onClick={handleLogout}
-            className="w-8 h-8 flex items-center justify-center text-white/40 hover:text-red-400 transition-all rounded-full hover:bg-red-400/10"
-            aria-label="Logout"
-            title="Logout"
-          >
-            <LogOut size={14} />
-          </button>
+           {/* Right: Security Badge & Logout */}
+           <div className="flex items-center gap-4">
+              <div className="hidden sm:flex flex-col items-end gap-1 px-3">
+                 <span className="text-[9px] font-bold text-white uppercase tracking-widest">{currentUser.firstName} {currentUser.lastName}</span>
+                 <span className="text-[8px] font-medium text-slate-400 uppercase tracking-widest">{currentUser.position}</span>
+              </div>
+              <div onClick={handleLogout} className="h-8 px-3 rounded bg-white/10 flex items-center justify-center text-white text-[9px] font-bold cursor-pointer hover:bg-talibon-red transition-all border border-white/10 uppercase shrink-0 gap-2 group">
+                 <LogOut size={12} className="group-hover:-translate-x-0.5 transition-transform" /> Logout
+              </div>
+           </div>
         </div>
-      </header>
+      </div>
 
-      {/* ── Main Content ── */}
-      <main className="flex-1 h-screen overflow-y-auto relative px-10 py-32 dotted-grid">
-        {/* Breadcrumb */}
-        <div className="max-w-7xl mx-auto mb-10 flex items-center justify-between">
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.8)]" />
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                PH-TAL-01 SECURE
-              </span>
-            </div>
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-              {activeTab === 'dashboard' && 'Executive Summary'}
-              {activeTab === 'employees' && 'Personnel Registry'}
-              {activeTab === 'payroll' && 'Financial Ledger'}
-              {activeTab === 'leave' && 'Workforce Mobility'}
-              {activeTab === 'attendance' && 'Attendance Records'}
-              {activeTab === 'audit' && 'Audit Logs'}
-              <span className="text-xs px-3 py-1 bg-slate-900 text-white rounded-full font-black uppercase tracking-widest">
-                {currentRole}
-              </span>
-            </h2>
-          </div>
+      {/* 2. MINIMALIST NAV BAR */}
+      {isHrisActive && (
+        <div className="bg-white border-b border-slate-200 sticky top-0 z-40 print:hidden">
+           <nav className="max-w-7xl mx-auto px-10 flex items-center gap-2 overflow-x-auto no-scrollbar">
+             {[
+               { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+               { id: 'employees', label: 'Personnel', icon: Users, restricted: currentUserRole !== 'admin' && currentUserRole !== 'dept_head' },
+               { id: 'attendance', label: 'Attendance', icon: Clock },
+               { id: 'reports', label: 'Reports', icon: FileText, restricted: currentUserRole !== 'admin' && currentUserRole !== 'payroll_officer' },
+               { id: 'inquiry', label: 'Inquiry', icon: Search },
+               { id: 'payroll', label: 'Payroll', icon: CreditCard, restricted: currentUserRole !== 'admin' && currentUserRole !== 'payroll_officer' },
+               { id: 'leave', label: 'Leave', icon: Briefcase },
+               { id: 'audit', label: 'Logs', icon: Shield, restricted: currentUserRole !== 'admin' },
+             ].map((item) => (
+               !item.restricted && (
+                 <button
+                   key={item.id}
+                   onClick={() => setActiveTab(item.id as any)}
+                   className={cn(
+                     "flex items-center gap-2 px-4 py-4 transition-all text-[10px] font-bold uppercase tracking-[0.2em] whitespace-nowrap group relative",
+                     activeTab === item.id 
+                       ? "text-slate-900" 
+                       : "text-slate-400 hover:text-slate-600"
+                   )}
+                 >
+                   <item.icon size={14} className={cn("transition-transform group-hover:scale-110", activeTab === item.id ? "text-talibon-red" : "text-slate-300")} />
+                   {item.label}
+                   {activeTab === item.id && (
+                     <motion.div 
+                       layoutId="nav-active"
+                       className="absolute bottom-0 left-0 right-0 h-0.5 bg-talibon-red"
+                     />
+                   )}
+                 </button>
+               )
+             ))}
+           </nav>
+        </div>
+      )}
 
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest">
-                {currentUser?.first_name} {currentUser?.last_name}
-              </p>
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
-                {formatDate(new Date())}
-              </p>
-            </div>
-            <div className="w-10 h-10 glass-card rounded-2xl flex items-center justify-center text-slate-400 hover:text-talibon-red transition-all cursor-pointer">
-              <Bell size={20} />
-            </div>
-          </div>
+      {/* Main Content Area */}
+      <main className="flex-1 overflow-y-auto custom-scrollbar relative px-10 py-16 dotted-grid sm:dotted-grid print:p-0 print:bg-white">
+        {/* Secondary Header / Breadcrumb */}
+        <div className="max-w-7xl mx-auto mb-10 flex items-center justify-between print:hidden">
+           <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2 mb-2">
+                 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.8)]"></div>
+                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">PH-TAL-01 SECURE</span>
+              </div>
+              <h2 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+                 {activeTab === 'dashboard' && 'Executive Summary'}
+                 {activeTab === 'employees' && 'Personnel Registry'}
+                 {activeTab === 'payroll' && 'Financial Ledger'}
+                 {activeTab === 'leave' && 'Workforce Mobility'}
+                 <span className="text-xs px-3 py-1 bg-slate-900 text-white rounded-full font-black uppercase tracking-widest">{currentUserRole}</span>
+              </h2>
+           </div>
+
+           <div className="flex items-center gap-4">
+              <div className="text-right">
+                 <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest">{formatDate(new Date())}</p>
+                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Secure Session</p>
+              </div>
+              <div className="w-10 h-10 glass-card rounded-2xl flex items-center justify-center text-slate-400 hover:text-talibon-red transition-all cursor-pointer">
+                 <Bell size={20} />
+              </div>
+           </div>
         </div>
 
-        {/* Tab content */}
         <div className="max-w-7xl mx-auto">
           <AnimatePresence mode="wait">
             <motion.div
@@ -339,98 +267,75 @@ function AppContent() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.25 }}
+              transition={{ duration: 0.3 }}
             >
-              {activeTab === 'dashboard' && (
-                <Dashboard employees={employees} userRole={currentRole} />
-              )}
-
-              {activeTab === 'employees' && (
-                <ProtectedFeature requiredRoles={['admin', 'dept_head']}>
-                  {employeeError ? (
-                    <ErrorState
-                      title="Failed to load employees"
-                      message={(employeeErrorDetails as Error)?.message ?? 'Please try again.'}
-                      onRetry={() => refetchEmployees()}
-                    />
-                  ) : employeeLoading ? (
-                    <EmployeeListSkeleton />
-                  ) : employees.length === 0 ? (
-                    <EmptyState
-                      title="No employees found"
-                      message="Start by adding your first employee to the system."
-                      icon="👥"
-                    />
-                  ) : (
-                    <EmployeeList
-                      employees={employees}
-                      loading={employeeLoading}
-                      onAdd={handleAddEmployee}
-                      onDelete={handleDeleteEmployee}
-                      onUpdate={handleUpdateEmployee}
-                    />
-                  )}
-                </ProtectedFeature>
-              )}
-
-              {activeTab === 'attendance' && (
-                attendanceError ? (
-                  <ErrorState
-                    title="Failed to load attendance"
-                    message="Please try again."
-                    onRetry={() => refetchAttendance()}
-                  />
-                ) : (
-                  <AttendanceTracker
-                    records={attendanceRecords}
-                    currentUserRole={currentRole}
-                    onLog={handleAttendanceLog}
-                  />
-                )
-              )}
-
-              {activeTab === 'payroll' && (
-                <ProtectedFeature requiredRoles={['admin', 'payroll_officer']}>
-                  <PayrollManagement employees={employees} />
-                </ProtectedFeature>
-              )}
-
-              {activeTab === 'leave' && (
-                <LeaveManagement
-                  employees={employees}
-                  isAdmin={currentRole === 'admin' || currentRole === 'dept_head'}
+              {activeTab === 'dashboard' && <Dashboard employees={employees} auditLogs={auditLogs} userRole={currentUserRole} currentUser={currentUser} />}
+              {activeTab === 'employees' && (currentUserRole === 'admin' || currentUserRole === 'dept_head') && (
+                <EmployeeList 
+                  employees={employees} 
+                  loading={employeeLoading}
+                  onAdd={handleAddEmployee}
+                  onDelete={handleDeleteEmployee}
+                  onUpdate={handleUpdateEmployee}
                 />
               )}
-
-              {activeTab === 'audit' && (
-                <ProtectedFeature requiredRoles={['admin']}>
-                  {auditError ? (
-                    <ErrorState
-                      title="Failed to load audit logs"
-                      message="Please try again."
-                      onRetry={() => refetchAudit()}
-                    />
-                  ) : (
-                    <AuditLogs logs={auditLogs} />
-                  )}
-                </ProtectedFeature>
+              {activeTab === 'attendance' && (
+                <AttendanceTracker 
+                  records={attendanceRecords} 
+                  currentUser={currentUser}
+                  onLog={handleAttendanceLog}
+                />
+              )}
+              {activeTab === 'payroll' && (
+                <PayrollManagement 
+                  employees={employees} 
+                  currentUser={currentUser}
+                  payrollRecords={payrollRecords}
+                />
+              )}
+              {activeTab === 'leave' && (
+                <LeaveManagement 
+                  employees={employees}
+                  currentUser={currentUser}
+                  isAdmin={currentUserRole === 'admin' || currentUserRole === 'dept_head'}
+                />
+              )}
+              {activeTab === 'audit' && currentUserRole === 'admin' && (
+                <AuditLogs logs={auditLogs} />
+              )}
+              {activeTab === 'reports' && (currentUserRole === 'admin' || currentUserRole === 'payroll_officer') && (
+                <ReportGenerator 
+                  employees={employees}
+                  attendance={attendanceRecords}
+                  leaves={(Array.isArray(leaveResponse?.data) ? leaveResponse.data : []) as LeaveRequest[]}
+                  payroll={payrollRecords}
+                />
+              )}
+              {activeTab === 'inquiry' && (
+                <SelfServicePortal 
+                  employees={employees}
+                  attendance={attendanceRecords}
+                  payroll={payrollRecords}
+                />
               )}
             </motion.div>
           </AnimatePresence>
         </div>
 
-        <footer className="absolute bottom-10 left-10 right-10 flex justify-between items-center text-[10px] font-black text-slate-300 uppercase tracking-[0.3em] pointer-events-none opacity-50">
-          <div>Municipal Office of Talibon • HRIS Division</div>
-          <div className="flex items-center gap-2">
-            <Shield size={12} className="text-talibon-orange" />
-            End-to-End Encryption Enabled
-          </div>
+        <footer className="mt-20 border-t border-slate-200 dark:border-slate-800 pt-10 pb-20 flex flex-col md:flex-row justify-between items-center gap-6">
+           <div className="flex flex-col gap-2 text-center md:text-left">
+              <p className="text-[11px] font-black text-slate-900 dark:text-white uppercase tracking-[0.3em]">Official HR Portal of the Municipality of Talibon</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Privacy Policy • Terms of Service • Accessibility Statement</p>
+           </div>
+           <div className="flex items-center gap-4 group">
+              <div className="text-right">
+                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Data Secured & Encrypted</p>
+                 <p className="text-[10px] font-black text-talibon-red uppercase tracking-[0.1em]">Verified Government Asset</p>
+              </div>
+              <Shield size={32} className="text-talibon-red group-hover:scale-110 transition-transform" />
+           </div>
         </footer>
       </main>
     </div>
   );
-}
-
-export default function App() {
-  return <AppContent />;
 }

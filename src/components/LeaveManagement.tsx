@@ -1,19 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { LeaveRequest, Employee } from '../types';
-import { Plus, X, Check, Loader2, Calendar, FileText, User } from 'lucide-react';
+import { Plus, X, Check, Loader2, Calendar, FileText, User, Bell, ShieldCheck, Briefcase } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { SupabaseService } from '../lib/supabaseService';
+import { cn } from '../lib/utils';
 
 interface LeaveManagementProps {
   employees: Employee[];
   isAdmin: boolean;
+  currentUser: Employee;
 }
 
-export default function LeaveManagement({ employees, isAdmin }: LeaveManagementProps) {
+export default function LeaveManagement({ employees, isAdmin, currentUser }: LeaveManagementProps) {
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [newRequest, setNewRequest] = useState<Omit<LeaveRequest, 'id' | 'status' | 'requestedAt'>>({
-    employeeId: '',
+    employeeId: currentUser.id,
     type: 'Vacation',
     startDate: '',
     endDate: '',
@@ -26,9 +30,16 @@ export default function LeaveManagement({ employees, isAdmin }: LeaveManagementP
 
   const fetchRequests = async () => {
     try {
-      const res = await fetch('/api/leave');
-      const data = await res.json();
-      setRequests(data);
+      setLoading(true);
+      const { data } = await SupabaseService.leaves.list();
+      const allRequests = (data || []) as LeaveRequest[];
+      
+      // Filter for non-admins to see only their own requests
+      if (!isAdmin) {
+        setRequests(allRequests.filter((r: LeaveRequest) => r.employeeId === currentUser.id));
+      } else {
+        setRequests(allRequests);
+      }
     } catch (error) {
       console.error('Failed to fetch leave requests', error);
     } finally {
@@ -38,224 +49,250 @@ export default function LeaveManagement({ employees, isAdmin }: LeaveManagementP
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitting(true);
     try {
-      const res = await fetch('/api/leave', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...newRequest,
-          status: 'pending',
-          requestedAt: new Date().toISOString(),
-        }),
+      await SupabaseService.leaves.create({
+        ...newRequest,
+        employeeId: isAdmin ? (newRequest.employeeId || currentUser.id) : currentUser.id
       });
-      if (res.ok) {
-        setIsAdding(false);
-        fetchRequests();
-      }
+      
+      await SupabaseService.audit.log({
+        userId: currentUser.id,
+        userName: `${currentUser.firstName} ${currentUser.lastName}`,
+        action: 'LEAVE_REQUEST_FILED',
+        target: `Type: ${newRequest.type}`
+      });
+
+      setIsAdding(false);
+      setNewRequest({
+        employeeId: currentUser.id,
+        type: 'Vacation',
+        startDate: '',
+        endDate: '',
+        reason: '',
+      });
+      fetchRequests();
     } catch (error) {
       console.error('Failed to submit leave request', error);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleAction = async (id: string, status: 'approved' | 'rejected') => {
-    // For now, we'll just update locally as we don't have a PUT route yet
-    setRequests(prev => prev.map(r => r.id === id ? { ...r, status } : r));
+    try {
+      await SupabaseService.leaves.updateStatus(id, status);
+      await SupabaseService.audit.log({
+        userId: currentUser.id,
+        userName: `${currentUser.firstName} ${currentUser.lastName}`,
+        action: `LEAVE_${status.toUpperCase()}`,
+        target: `Request ID: ${id.slice(-6)}`
+      });
+      fetchRequests();
+    } catch (error) {
+      console.error(`Failed to ${status} leave record`, error);
+    }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center glass-panel p-6 rounded-3xl">
+    <div className="space-y-8 pb-32">
+      <header className="flex justify-between items-end border-b border-slate-100 pb-6">
         <div>
-          <h2 className="font-black text-2xl text-slate-800 tracking-tight">Leave Management</h2>
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Personnel Absence Tracking</p>
+           <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Leave Management</h2>
+           <p className="font-serif italic text-slate-400 text-sm mt-2">Personnel Mobility & Absence Records</p>
         </div>
         <button 
           onClick={() => setIsAdding(true)}
-          className="bg-talibon-orange text-white px-8 py-3 rounded-2xl flex items-center gap-2 hover:bg-talibon-red transition-all font-black text-xs uppercase tracking-widest shadow-xl shadow-talibon-orange/10 active:scale-95"
+          className="bg-slate-900 text-white px-8 py-3 rounded-xl flex items-center gap-2 hover:bg-talibon-red transition-all font-bold text-[10px] uppercase tracking-widest shadow-xl shadow-slate-900/10 active:scale-95"
         >
-          <Plus size={18} />
-          File Leave Request
+          <Plus size={16} />
+          File New Request
         </button>
-      </div>
+      </header>
 
       <AnimatePresence>
         {isAdding && (
           <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="overflow-hidden"
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm"
           >
-            <form onSubmit={handleSubmit} className="bg-white/60 backdrop-blur-2xl p-10 rounded-[2rem] border-2 border-talibon-orange/30 shadow-2xl space-y-6 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-talibon-orange/5 blur-3xl -mr-32 -mt-32"></div>
-              <div className="flex justify-between items-center border-b border-white/40 pb-6 relative z-10">
-                <div className="flex items-center gap-3">
-                   <div className="w-10 h-10 bg-talibon-orange text-white rounded-xl flex items-center justify-center shadow-lg shadow-talibon-orange/20">
-                      <Calendar size={20} />
-                   </div>
-                   <h3 className="font-black text-xl text-slate-800 tracking-tight">Employee Leave Filing</h3>
-                </div>
-                <button type="button" onClick={() => setIsAdding(false)} className="text-slate-400 hover:text-talibon-red bg-white/40 p-2 rounded-xl transition-colors border border-white/60">
-                  <X size={20} />
-                </button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Staff Member</label>
-                  <select 
-                    required
-                    className="w-full px-4 py-3 bg-white/40 border border-white/60 rounded-xl focus:bg-white focus:outline-none focus:border-talibon-red/30 transition-all font-bold"
-                    value={newRequest.employeeId}
-                    onChange={e => setNewRequest({...newRequest, employeeId: e.target.value})}
-                  >
-                    <option value="">Select Personnel...</option>
-                    {employees.map(emp => (
-                      <option key={emp.id} value={emp.id} className="bg-white text-slate-800">{emp.firstName} {emp.lastName}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Leave Category</label>
-                  <select 
-                    className="w-full px-4 py-3 bg-white/40 border border-white/60 rounded-xl focus:bg-white focus:outline-none focus:border-talibon-red/30 transition-all font-bold"
-                    value={newRequest.type}
-                    onChange={e => setNewRequest({...newRequest, type: e.target.value as any})}
-                  >
-                    <option value="Vacation" className="bg-white text-slate-800">Vacation Leave</option>
-                    <option value="Sick" className="bg-white text-slate-800">Sick Leave</option>
-                    <option value="Maternity" className="bg-white text-slate-800">Maternity Leave</option>
-                    <option value="Paternity" className="bg-white text-slate-800">Paternity Leave</option>
-                    <option value="Emergency" className="bg-white text-slate-800">Emergency Leave</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Status Date</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input 
-                      type="date" 
-                      required 
-                      className="w-full px-4 py-3 bg-white/40 border border-white/60 rounded-xl focus:bg-white focus:outline-none focus:border-talibon-red/30 transition-all font-bold text-xs" 
-                      value={newRequest.startDate}
-                      onChange={e => setNewRequest({...newRequest, startDate: e.target.value})}
-                    />
-                    <input 
-                      type="date" 
-                      required 
-                      className="w-full px-4 py-3 bg-white/40 border border-white/60 rounded-xl focus:bg-white focus:outline-none focus:border-talibon-red/30 transition-all font-bold text-xs" 
-                      value={newRequest.endDate}
-                      onChange={e => setNewRequest({...newRequest, endDate: e.target.value})}
-                    />
+            <motion.div className="bg-white max-w-2xl w-full rounded-2xl shadow-2xl overflow-hidden">
+               <form onSubmit={handleSubmit} className="flex flex-col">
+                  <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                     <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-talibon-red shadow-sm">
+                           <Briefcase size={20} />
+                        </div>
+                        <h3 className="text-xl font-bold text-slate-900 tracking-tight">Leave Application Form</h3>
+                     </div>
+                     <button type="button" onClick={() => setIsAdding(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                        <X size={20} />
+                     </button>
                   </div>
-                </div>
-                <div className="md:col-span-2 lg:col-span-3 space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Justification / Reason</label>
-                  <textarea 
-                    required 
-                    className="w-full px-4 py-3 bg-white/40 border border-white/60 rounded-xl focus:bg-white focus:outline-none focus:border-talibon-red/30 transition-all font-bold min-h-[100px]" 
-                    value={newRequest.reason}
-                    onChange={e => setNewRequest({...newRequest, reason: e.target.value})}
-                    placeholder="Provide a brief explanation for the leave request..."
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end gap-4 pt-6 border-t border-white/40 relative z-10">
-                <button 
-                  type="button" 
-                  onClick={() => setIsAdding(false)}
-                  className="px-8 py-3 bg-white/40 rounded-xl text-slate-500 font-black uppercase tracking-widest text-[10px] hover:bg-white/60 transition-all border border-white/60"
-                >
-                  Discard
-                </button>
-                <button 
-                  type="submit" 
-                  className="px-10 py-3 bg-slate-900 text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-talibon-orange shadow-xl shadow-slate-900/10 transition-all active:scale-95"
-                >
-                  Submit for Approval
-                </button>
-              </div>
-            </form>
+                  
+                  <div className="p-10 space-y-8">
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {isAdmin && (
+                           <div className="space-y-2">
+                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Personnel Record</label>
+                             <select 
+                               required
+                               className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:outline-none focus:border-slate-300 transition-all font-bold text-slate-700"
+                               value={newRequest.employeeId}
+                               onChange={e => setNewRequest({...newRequest, employeeId: e.target.value})}
+                             >
+                               <option value="">Select Personnel...</option>
+                               {employees.map(emp => (
+                                 <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</option>
+                               ))}
+                             </select>
+                           </div>
+                        )}
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Leave Category</label>
+                          <select 
+                            className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:outline-none focus:border-slate-300 transition-all font-bold text-slate-700"
+                            value={newRequest.type}
+                            onChange={e => setNewRequest({...newRequest, type: e.target.value as any})}
+                          >
+                            <option value="Vacation">Vacation Leave</option>
+                            <option value="Sick">Sick Leave</option>
+                            <option value="Emergency">Emergency Leave</option>
+                            <option value="Maternity">Maternity Leave</option>
+                            <option value="Paternity">Paternity Leave</option>
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Effective Date</label>
+                           <input 
+                             type="date" 
+                             required 
+                             className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:outline-none focus:border-slate-300 transition-all font-bold text-xs" 
+                             value={newRequest.startDate}
+                             onChange={e => setNewRequest({...newRequest, startDate: e.target.value})}
+                           />
+                        </div>
+                        <div className="space-y-2">
+                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Conclusion Date</label>
+                           <input 
+                             type="date" 
+                             required 
+                             className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:outline-none focus:border-slate-300 transition-all font-bold text-xs" 
+                             value={newRequest.endDate}
+                             onChange={e => setNewRequest({...newRequest, endDate: e.target.value})}
+                           />
+                        </div>
+                     </div>
+                     <div className="space-y-2">
+                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Justification Brief</label>
+                       <textarea 
+                         required 
+                         className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:outline-none focus:border-slate-300 transition-all font-bold min-h-[120px] text-slate-700" 
+                         value={newRequest.reason}
+                         onChange={e => setNewRequest({...newRequest, reason: e.target.value})}
+                         placeholder="Explain the necessity for this absence..."
+                       />
+                     </div>
+                  </div>
+
+                  <div className="p-8 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+                     <button 
+                        type="button" 
+                        onClick={() => setIsAdding(false)}
+                        className="px-6 py-3 bg-white border border-slate-200 rounded-xl text-slate-400 font-bold uppercase tracking-widest text-[9px] hover:text-slate-600 hover:border-slate-300 transition-all"
+                     >
+                        Discard
+                     </button>
+                     <button 
+                        type="submit" 
+                        disabled={submitting}
+                        className="px-10 py-3 bg-slate-900 text-white rounded-xl font-bold uppercase tracking-widest text-[9px] hover:bg-talibon-red disabled:bg-slate-200 shadow-xl transition-all flex items-center gap-2"
+                     >
+                        {submitting ? <Loader2 className="animate-spin" size={14} /> : <Check size={14} />}
+                        Transmit Request
+                     </button>
+                  </div>
+               </form>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="grid grid-cols-1 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {loading ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="animate-spin text-talibon-red" size={48} />
+          <div className="col-span-full flex flex-col items-center justify-center py-32 space-y-4">
+            <Loader2 className="animate-spin text-slate-300" size={32} />
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Accessing Encrypted Records...</p>
           </div>
         ) : requests.length === 0 ? (
-          <div className="glass-panel p-20 rounded-[2rem] text-center">
-             <div className="opacity-10 font-black text-4xl uppercase tracking-[0.5em] text-slate-400">Clear Records</div>
+          <div className="col-span-full bg-white border border-slate-200 p-20 rounded-xl text-center">
+             <div className="flex flex-col items-center justify-center space-y-4">
+                <FileText size={48} className="text-slate-100" />
+                <p className="text-[11px] font-bold uppercase tracking-widest text-slate-300">No identity matching records found</p>
+             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {requests.map(req => {
-              const emp = employees.find(e => e.id === req.employeeId);
-              return (
-                <motion.div 
-                  layout
-                  key={req.id} 
-                  className="glass-panel p-8 rounded-[2rem] hover:bg-white/60 transition-all group relative overflow-hidden"
-                >
-                  <div className={`absolute top-0 right-0 w-24 h-24 blur-3xl opacity-20 rounded-full transition-colors ${
-                    req.status === 'approved' ? 'bg-emerald-500' : req.status === 'rejected' ? 'bg-talibon-red' : 'bg-amber-500'
-                  }`}></div>
-                  
-                  <div className="flex justify-between items-start mb-6 relative">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-white/60 text-talibon-red rounded-xl flex items-center justify-center font-black shadow-sm border border-white/80 backdrop-blur-md transition-transform group-hover:scale-110">
-                        {emp?.firstName[0]}{emp?.lastName[0]}
-                      </div>
-                      <div>
-                         <p className="font-black text-slate-800 tracking-tight leading-none">{emp?.firstName} {emp?.lastName}</p>
-                         <p className="text-[10px] font-black text-slate-500 uppercase tracking-tighter mt-1">{emp?.position}</p>
-                      </div>
+          requests.map(req => {
+            const emp = employees.find(e => e.id === req.employeeId);
+            return (
+              <motion.div 
+                layout
+                key={req.id} 
+                className="bg-white border border-slate-200 p-8 rounded-xl hover:shadow-xl transition-all group flex flex-col h-full"
+              >
+                <div className="flex justify-between items-start mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-slate-900 text-white rounded-lg flex items-center justify-center font-bold text-xs">
+                      {emp?.firstName[0]}{emp?.lastName[0]}
                     </div>
-                    <span className={`text-[8px] font-black uppercase tracking-widest px-3 py-1 rounded-full border backdrop-blur-md ${
-                      req.status === 'approved' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' : 
-                      req.status === 'rejected' ? 'bg-talibon-red/10 text-talibon-red border-talibon-red/20' : 
-                      'bg-amber-500/10 text-amber-600 border-amber-500/20'
-                    }`}>
-                      {req.status}
-                    </span>
-                  </div>
-
-                  <div className="space-y-4 relative">
-                    <div className="bg-white/40 p-4 rounded-2xl border border-white/60 backdrop-blur-sm shadow-sm">
-                       <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-1">
-                          <Calendar size={12} className="text-talibon-orange" /> Duration
-                       </p>
-                       <p className="font-black text-slate-700 tracking-tight">{new Date(req.startDate).toLocaleDateString()} — {new Date(req.endDate).toLocaleDateString()}</p>
-                    </div>
-                    
-                    <div className="bg-white/20 p-4 rounded-2xl border border-white/20">
-                       <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-1">
-                          <FileText size={12} className="text-talibon-orange" /> Reason
-                       </p>
-                       <p className="text-xs font-medium text-slate-600 leading-relaxed italic pr-4">"{req.reason}"</p>
+                    <div>
+                       <p className="font-bold text-slate-900 tracking-tight leading-none text-sm">{emp?.firstName} {emp?.lastName}</p>
+                       <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">{emp?.position}</p>
                     </div>
                   </div>
+                  <span className={cn(
+                    "px-2 py-1 rounded text-[8px] font-bold uppercase tracking-widest border",
+                    req.status === 'approved' ? "bg-emerald-50 text-emerald-600 border-emerald-100" : 
+                    req.status === 'rejected' ? "bg-red-50 text-red-600 border-red-100" : 
+                    "bg-orange-50 text-orange-600 border-orange-100"
+                  )}>
+                    {req.status}
+                  </span>
+                </div>
 
-                  {req.status === 'pending' && isAdmin && (
-                    <div className="flex gap-2 mt-8 pt-6 border-t border-white/20 relative">
-                       <button 
-                        onClick={() => handleAction(req.id, 'approved')}
-                        className="flex-1 py-3 bg-emerald-500 text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-emerald-600 shadow-lg shadow-emerald-500/20 transition-all active:scale-95 flex items-center justify-center gap-2"
-                       >
-                         <Check size={14} /> Approve
-                       </button>
-                       <button 
-                        onClick={() => handleAction(req.id, 'rejected')}
-                        className="flex-1 py-3 bg-white/40 text-talibon-red border border-white/60 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-talibon-red hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2 backdrop-blur-sm"
-                       >
-                         <X size={14} /> Decline
-                       </button>
-                    </div>
-                  )}
-                </motion.div>
-              );
-            })}
-          </div>
+                <div className="flex-1 space-y-4">
+                   <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Effective Range</p>
+                      <p className="text-xs font-bold text-slate-700 tracking-tight">{req.startDate} — {req.endDate}</p>
+                   </div>
+                   
+                   <div className="px-1">
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Justification</p>
+                      <p className="text-xs font-medium text-slate-600 leading-relaxed italic line-clamp-3">"{req.reason}"</p>
+                   </div>
+                </div>
+
+                {req.status === 'pending' && isAdmin && (
+                  <div className="flex gap-2 mt-8 pt-6 border-t border-slate-100">
+                     <button 
+                      onClick={() => handleAction(req.id, 'approved')}
+                      className="flex-1 py-2 bg-emerald-600 text-white rounded-lg font-bold uppercase tracking-widest text-[9px] hover:bg-emerald-700 transition-all flex items-center justify-center gap-2"
+                     >
+                       Accept
+                     </button>
+                     <button 
+                      onClick={() => handleAction(req.id, 'rejected')}
+                      className="flex-1 py-2 bg-white text-slate-400 border border-slate-200 rounded-lg font-bold uppercase tracking-widest text-[9px] hover:bg-talibon-red hover:text-white transition-all flex items-center justify-center gap-2"
+                     >
+                       Reject
+                     </button>
+                  </div>
+                )}
+              </motion.div>
+            );
+          })
         )}
       </div>
     </div>

@@ -1,111 +1,97 @@
-// ============================================
-// TALIBON HRIS — Canonical Type Definitions
-// ============================================
-
 export type Role = 'admin' | 'dept_head' | 'employee' | 'payroll_officer';
 export type EmploymentStatus = 'Regular' | 'Casual' | 'Contractual';
-export type EmployeeStatus = 'active' | 'inactive';
 
-export interface GovIds {
-  sss?: string;
-  philhealth?: string;
-  pagibig?: string;
-  tin?: string;
-}
-
-export type IDType = 'SSS' | 'PhilHealth' | 'Pag-IBIG' | 'TIN' | 'Driver License' | 'Passport';
-
-// Matches Supabase snake_case column names
 export interface Employee {
   id: string;
-  first_name: string;
-  last_name: string;
+  employeeId?: string; // Manual ID (e.g. TAL-2026-001)
+  firstName: string;
+  lastName: string;
   email: string;
   department: Department;
   position: string;
   salary: number;
-  hire_date: string;
+  hireDate: string;
   role: Role;
-  status: EmployeeStatus;
-  employment_status: EmploymentStatus;
-  id_type?: IDType;
-  id_number?: string;
+  status: 'active' | 'inactive';
+  employmentStatus: EmploymentStatus;
   sss?: string;
   philhealth?: string;
   pagibig?: string;
   tin?: string;
-  created_at?: string;
-  updated_at?: string;
+  govIds?: {
+    sss: string;
+    philhealth: string;
+    pagibig: string;
+    tin: string;
+  };
+  leaveBalances?: {
+    vacation: number;
+    sick: number;
+    emergency: number;
+  };
 }
 
 export interface AttendanceRecord {
   id: string;
-  employee_id: string;
-  date: string;          // YYYY-MM-DD
-  time_in: string;       // ISO timestamp
-  time_out?: string;     // ISO timestamp
-  total_hours: number;
+  employeeId: string;
+  date: string; // YYYY-MM-DD
+  timeIn: string; // ISO
+  timeOut?: string; // ISO
+  totalHours: number;
   status: 'present' | 'late' | 'absent' | 'undertime';
-  is_correction_requested?: boolean;
-  correction_note?: string;
-  created_at?: string;
-  updated_at?: string;
+  isCorrectionRequested?: boolean;
+  correctionNote?: string;
 }
 
 export interface PayrollRecord {
   id: string;
-  employee_id: string;
-  period: string;           // YYYY-MM
-  basic_salary: number;
-  hazard_allowance?: number;
-  bonus_allowance?: number;
-  other_allowance?: number;
-  sss_deduction: number;
-  philhealth_deduction: number;
-  pagibig_deduction: number;
-  tax_deduction: number;
-  late_penalty: number;
-  overtime_pay: number;
-  gross_pay: number;
-  net_pay: number;
+  employeeId: string;
+  period: string; // YYYY-MM
+  basicSalary: number;
+  hazardAllowance?: number;
+  bonusAllowance?: number;
+  otherAllowance?: number;
+  sssDeduction: number;
+  philhealthDeduction: number;
+  pagibigDeduction: number;
+  taxDeduction: number;
+  latePenalty: number;
+  overtimePay: number;
+  grossPay: number;
+  netPay: number;
   status: 'pending' | 'approved' | 'paid';
-  processed_at?: string;
-  created_at?: string;
-  updated_at?: string;
+  processedAt?: string;
 }
 
 export interface LeaveRequest {
   id: string;
-  employee_id: string;
+  employeeId: string;
   type: 'Vacation' | 'Sick' | 'Maternity' | 'Paternity' | 'Emergency';
-  start_date: string;
-  end_date: string;
+  startDate: string;
+  endDate: string;
   reason: string;
   status: 'pending' | 'approved' | 'rejected';
-  requested_at: string;
+  requestedAt: string;
   remarks?: string;
-  created_at?: string;
-  updated_at?: string;
 }
 
 export interface AuditLog {
   id: string;
-  user_id: string;
-  user_name: string;
+  userId: string;
+  userName: string;
   action: string;
   target: string;
   timestamp: string;
-  created_at?: string;
 }
 
 export interface AppNotification {
   id: string;
-  user_id: string;
+  userId: string;
   title: string;
   message: string;
   type: 'info' | 'success' | 'warning' | 'error';
-  is_read: boolean;
-  created_at: string;
+  isRead: boolean;
+  createdAt: string;
 }
 
 export const DEPARTMENTS = [
@@ -116,7 +102,7 @@ export const DEPARTMENTS = [
   'Agriculture',
   'Tourism',
   'Social Welfare',
-  'Planning & Development',
+  'Planning & Development'
 ] as const;
 
 export type Department = (typeof DEPARTMENTS)[number];

@@ -22,9 +22,6 @@
       ]
     },
     "allowImportingTsExtensions": true,
-    "noEmit": true,
-    "suppressImplicitAnyIndexErrors": true
-  },
-  "include": ["src/**/*", "server.ts"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/setupTests.ts"]
+    "noEmit": true
+  }
 }

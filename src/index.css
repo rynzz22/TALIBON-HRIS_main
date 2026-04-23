@@ -1,12 +1,14 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Montserrat:wght@700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Montserrat:wght@700;800&family=Libre+Baskerville:italic@1&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", "Segoe UI", Roboto, system-ui, sans-serif;
   --font-display: "Montserrat", "Inter", sans-serif;
+  --font-serif: "Libre Baskerville", "Georgia", serif;
   
   --color-talibon-red: #D92E2E;
   --color-talibon-orange: #F97316;
+  --color-talibon-orange-portal: #E35F20;
   --color-talibon-dark: #1F2937;
   --color-talibon-light: #6B7280;
   --color-gov-grey: #F3f4f6;
@@ -14,50 +16,32 @@
 
 @layer base {
   body {
-    @apply antialiased text-talibon-dark bg-slate-100 min-h-screen relative overflow-x-hidden;
-  }
-
-  /* Atmospheric Gradient Background */
-  body::before {
-    content: '';
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: 
-      radial-gradient(circle at 10% 20%, rgba(217, 46, 46, 0.05) 0%, transparent 40%),
-      radial-gradient(circle at 90% 80%, rgba(249, 115, 22, 0.05) 0%, transparent 40%),
-      radial-gradient(circle at 50% 50%, rgba(243, 244, 246, 1) 0%, rgba(226, 232, 240, 1) 100%);
-    z-index: -1;
+    @apply antialiased text-slate-900 bg-[#F8FAFC] min-h-screen relative overflow-x-hidden selection:bg-talibon-red selection:text-white;
   }
 }
 
 .glass-panel {
-  @apply bg-white/60 backdrop-blur-xl border border-white/40 shadow-xl;
+  @apply bg-white border border-slate-200 shadow-sm;
 }
 
 .glass-card {
-  @apply bg-white/40 backdrop-blur-md border border-white/40 shadow-lg hover:bg-white/60 transition-all duration-300;
+  @apply bg-white border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300;
 }
 
 .dotted-grid {
-  background-image: radial-gradient(circle, #e2e8f0 1.5px, transparent 1px);
-  background-size: 32px 32px;
+  background-image: radial-gradient(circle, #f1f5f9 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - Minimalist */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 ::-webkit-scrollbar-track {
-  @apply bg-slate-100;
+  @apply bg-transparent;
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-slate-300 rounded-full;
-}
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-talibon-red/50;
+  @apply bg-slate-200 rounded-full hover:bg-slate-300 transition-colors;
 }
 
 .nav-link {
@@ -66,5 +50,33 @@
 
 .nav-link.active {
   @apply bg-white/20;
+}
+
+@media print {
+  @page {
+    size: landscape;
+    margin: 0.5in;
+  }
+  
+  body {
+    background-color: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Hide main navigation and other non-print elements globally when printing */
+  nav, .print\:hidden {
+    display: none !important;
+  }
+
+  .print\:block {
+    display: block !important;
+  }
+
+  header, footer, aside, button {
+    print-color-adjust: exact;
+  }
 }
 
