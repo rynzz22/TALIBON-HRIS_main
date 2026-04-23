@@ -13,6 +13,8 @@ export interface GovIds {
   tin?: string;
 }
 
+export type IDType = 'SSS' | 'PhilHealth' | 'Pag-IBIG' | 'TIN' | 'Driver License' | 'Passport';
+
 // Matches Supabase snake_case column names
 export interface Employee {
   id: string;
@@ -26,6 +28,8 @@ export interface Employee {
   role: Role;
   status: EmployeeStatus;
   employment_status: EmploymentStatus;
+  id_type?: IDType;
+  id_number?: string;
   sss?: string;
   philhealth?: string;
   pagibig?: string;
