@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { format, isWithinInterval, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth } from 'date-fns';
 import { Employee, AttendanceRecord, PayrollRecord, LeaveRequest } from '../types';
 import { formatCurrency, cn } from '../lib/utils';
+import DailyTimeRecord from './DailyTimeRecord';
 
 interface ReportGeneratorProps {
   employees: Employee[];
@@ -18,6 +19,7 @@ export default function ReportGenerator({ employees, attendance, leaves, payroll
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [periodType, setPeriodType] = useState<ReportPeriod>('monthly');
   const [selectedDept, setSelectedDept] = useState<string>('All');
+  const [viewingDtrFor, setViewingDtrFor] = useState<string | null>(null);
 
   // Define date range based on selection
   const range = useMemo(() => {
@@ -95,6 +97,21 @@ export default function ReportGenerator({ employees, attendance, leaves, payroll
   const handleExport = () => {
     window.print();
   };
+
+  if (viewingDtrFor) {
+    const targetEmployee = employees.find(e => e.id === viewingDtrFor);
+    if (targetEmployee) {
+      return (
+        <DailyTimeRecord 
+          employee={targetEmployee} 
+          attendance={attendance} 
+          month={selectedMonth} 
+          initialPeriod={periodType === 'custom' ? 'monthly' : periodType}
+          onBack={() => setViewingDtrFor(null)}
+        />
+      );
+    }
+  }
 
   return (
     <div className="space-y-8 pb-32 print:p-0 print:m-0">
@@ -209,6 +226,7 @@ export default function ReportGenerator({ employees, attendance, leaves, payroll
                      <th className="px-6 py-6 text-[10px] font-black uppercase tracking-[0.2em] border-r border-white/5">Mobility (Leaves)</th>
                      <th className="px-6 py-6 text-[10px] font-black uppercase tracking-[0.2em] border-r border-white/5">Statutory & Late</th>
                      <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-right">Net Allocation</th>
+                     <th className="px-6 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-center print:hidden">DTR Preview</th>
                   </tr>
                </thead>
                <tbody className="divide-y divide-slate-100">
@@ -262,12 +280,20 @@ export default function ReportGenerator({ employees, attendance, leaves, payroll
                           </p>
                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-2">{periodType} period</p>
                        </td>
+                       <td className="px-6 py-6 text-center print:hidden border-l border-slate-50">
+                          <button 
+                            onClick={() => setViewingDtrFor(row.id)}
+                            className="p-2 border border-slate-100 rounded-lg hover:bg-talibon-red hover:text-white text-slate-400 transition-all font-bold text-[8px] uppercase tracking-tighter"
+                          >
+                             Form 48
+                          </button>
+                       </td>
                     </tr>
                   ))}
                </tbody>
                 <tfoot className="bg-slate-50 border-t-2 border-slate-900">
                   <tr>
-                     <td colSpan={4} className="px-8 py-10 text-right">
+                     <td colSpan={5} className="px-8 py-10 text-right">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Aggregate Disbursement Capital</p>
                      </td>
                      <td className="px-8 py-10 text-right">

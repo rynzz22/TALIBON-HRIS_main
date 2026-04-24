@@ -1,0 +1,99 @@
+================================================================================
+ENTERPRISE HRIS: 1.5 MONTH STRATEGIC DEVELOPMENT ROADMAP (6 WEEKS)
+Municipality of Talibon - Human Resource Intelligence System (HRIS)
+================================================================================
+
+Total Duration: 45 Days (approx. 6 Weeks)
+Objective: From MVP to a fully audited, production-ready Enterprise HRIS.
+
+--------------------------------------------------------------------------------
+WEEK 1: CORE ARCHITECTURE & SECURE FOUNDATION (Days 1-7)
+Focus: Data Integrity & Database Hardening
+--------------------------------------------------------------------------------
+[ ] Day 1-2: Relational Data Modeling (Supabase/PostgreSQL)
+    - Finalize 'employees', 'departments', 'positions' schemas.
+    - Implement RLS (Row Level Security) to prevent cross-tenant data leaks.
+[ ] Day 3-4: Authentication & Role-Based Access Control (RBAC)
+    - Setup Google Auth & Custom Claims (Admin, DeptHead, Employee, Payroll).
+    - Build the Login Terminal with session persistence.
+[ ] Day 5-7: Personnel Registry MVP
+    - CRUD operations for the employee master list.
+    - Integration of basic ID generation logic (PH-TAL-XXXX).
+
+--------------------------------------------------------------------------------
+WEEK 2: PERSONNEL INTELLIGENCE & GOV-COMPLIANCE (Days 8-14)
+Focus: Rich Profiles & Statutory Tracking
+--------------------------------------------------------------------------------
+[ ] Day 8-10: Advanced Employee Profiles
+    - Family background, Educational background, Service records (201 Files).
+    - Digital Document Vault (File uploads for PDS, Birth Certs, etc.)
+[ ] Day 11-12: Statutory Information Management
+    - SSS, PhilHealth, Pag-IBIG, TIN trackers.
+    - Automated validity checks for government IDs.
+[ ] Day 13-14: Departmental Hierarchy Mapping
+    - Organizational structure visualization.
+    - Department transfer history logs.
+
+--------------------------------------------------------------------------------
+WEEK 3: ATTENDANCE TERMINAL & BIOMETRIC SYNC (Days 15-21)
+Focus: Real-time Duty Monitoring
+--------------------------------------------------------------------------------
+[ ] Day 15-17: The "Smart Terminal" UI/UX
+    - Precise Time-In/Out logic with GPS/Geofencing (Optional for field workers).
+    - QR Code scanning for instant walk-in attendance.
+[ ] Day 18-19: Biometric Hardware Integration (API Logic)
+    - Architecting the bridge to ZKTeco/HikVision biometric data pushes.
+    - Automated syncing of daily logs from devices to cloud.
+[ ] Day 20-21: Exception Handling & Corrections
+    - Workflow for "Missed Log" requests.
+    - Department head approval gate for log corrections.
+
+--------------------------------------------------------------------------------
+WEEK 4: PAYROLL ENGINE & FISCAL GENERATIVE MATRICES (Days 22-28)
+Focus: The Financial Core
+--------------------------------------------------------------------------------
+[ ] Day 22-24: Disbursement Engine (The Math)
+    - Automated 13th-month, overtime, Hazard Pay, and night differential logic.
+    - Dynamic deduction calculators (Updated Phic/SSS tables).
+[ ] Day 25-26: The Generative Matrix (Master Ledger)
+    - Export tools for PDF/Excel (Kensena 1 & 2).
+    - Digital signature integration for official payroll sheets.
+[ ] Day 27-28: Payroll History & Archiving
+    - Snapshotting fiscal records for permanent municipal audit records.
+
+--------------------------------------------------------------------------------
+WEEK 5: LEAVE MOBILITY & EMPLOYEE SELF-SERVICE (ESS) (Days 29-35)
+Focus: Productivity & Empowerment
+--------------------------------------------------------------------------------
+[ ] Day 29-31: Leave Management System (LMS)
+    - Automated Leave Credit earn-rates (1.25/month).
+    - Multi-stage approval worklow (Dept Head -> HR -> Mayor).
+[ ] Day 32-33: Personnel Inquiry Desk (The Employee Portal)
+    - Mobile-responsive view for Payslips and Personal Attendance logs.
+    - Personal Announcement Board for municipal-wide memos.
+[ ] Day 34-35: Training & Career Progression Trackers
+    - Seminar/Training logs for personnel development.
+
+--------------------------------------------------------------------------------
+WEEK 6: SECURITY HARDENING, AUDIT & DEPLOYMENT (Days 36-45)
+Focus: Professional Polishing & Launch
+--------------------------------------------------------------------------------
+[ ] Day 36-38: Full System Audit Logs
+    - Non-repudiation logging (Who changed what, where, and when).
+    - Log integrity verification (Preventing log tampering).
+[ ] Day 39-41: Performance Optimization & Bug Squashing
+    - Load testing (Can it handle 500+ employees clocking in simultaneously?).
+    - Indexing database queries for sub-second report generation.
+[ ] Day 42-43: UAT (User Acceptance Testing)
+    - Simulated payroll run with actual HR staff.
+    - Feedback loop and minor UI adjustments.
+[ ] Day 44-45: Production Deployment & Training
+    - Production DB migration.
+    - Staff training session & creation of Quick Reference Guides.
+
+================================================================================
+TECHNICAL STACK RECOMMENDATION:
+Frontend: React 18+ (TS) | Layout: Tailwind CSS | Animation: Framer Motion
+Backend: Supabase (PostgreSQL + Auth + Storage)
+Charts: Recharts/D3.js | Date Management: date-fns
+================================================================================

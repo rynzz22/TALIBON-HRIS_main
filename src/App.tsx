@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Employee, PayrollRecord, DEPARTMENTS, Role, AttendanceRecord, AuditLog } from './types';
+import { Employee, PayrollRecord, DEPARTMENTS, Role, AttendanceRecord, AuditLog, LeaveRequest } from './types';
 import { cn, formatDate } from './lib/utils';
 
 // Components
