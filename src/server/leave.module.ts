@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Injectable, Module, Param, Post, Put, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Inject, Injectable, Module, Param, Post, Put, UseGuards } from "@nestjs/common";
 import { IsEnum, IsOptional, IsString } from "class-validator";
 import type { LeaveRequest } from "../types";
 import { AuthGuard } from "./common/auth.guard";
@@ -23,7 +23,7 @@ class UpdateLeaveStatusDto {
 @Injectable()
 class LeaveService {
   private fallback: LeaveRequest[] = [];
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(@Inject(SupabaseService) private readonly supabase: SupabaseService) {}
 
   async list() {
     const client = this.supabase.getClient();
@@ -68,7 +68,7 @@ class LeaveService {
 @Controller("api/leave")
 @UseGuards(AuthGuard, RolesGuard)
 class LeaveController {
-  constructor(private readonly leave: LeaveService) {}
+  constructor(@Inject(LeaveService) private readonly leave: LeaveService) {}
 
   @Get()
   @Roles("admin", "dept_head", "employee", "payroll_officer")

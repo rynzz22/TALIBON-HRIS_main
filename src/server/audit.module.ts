@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Injectable, Module, Post, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Inject, Injectable, Module, Post, UseGuards } from "@nestjs/common";
 import { IsString } from "class-validator";
 import type { AuditLog } from "../types";
 import { AuthGuard } from "./common/auth.guard";
@@ -17,7 +17,7 @@ class CreateAuditDto {
 @Injectable()
 class AuditService {
   private fallback: AuditLog[] = [];
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(@Inject(SupabaseService) private readonly supabase: SupabaseService) {}
 
   async list() {
     const client = this.supabase.getClient();
@@ -48,7 +48,7 @@ class AuditService {
 @Controller("api/audit")
 @UseGuards(AuthGuard, RolesGuard)
 class AuditController {
-  constructor(private readonly audit: AuditService) {}
+  constructor(@Inject(AuditService) private readonly audit: AuditService) {}
 
   @Get()
   @Roles("admin")

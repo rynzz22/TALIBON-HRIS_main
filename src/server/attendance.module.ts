@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Injectable, Module, Post, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Inject, Injectable, Module, Post, UseGuards } from "@nestjs/common";
 import { IsEnum, IsString } from "class-validator";
 import type { AttendanceRecord } from "../types";
 import { AuthGuard, type AuthenticatedRequest } from "./common/auth.guard";
@@ -18,7 +18,7 @@ class AttendanceLogDto {
 @Injectable()
 class AttendanceService {
   private fallback: AttendanceRecord[] = [];
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(@Inject(SupabaseService) private readonly supabase: SupabaseService) {}
 
   async list() {
     const client = this.supabase.getClient();
@@ -86,7 +86,7 @@ class AttendanceService {
 @Controller("api/attendance")
 @UseGuards(AuthGuard, RolesGuard)
 class AttendanceController {
-  constructor(private readonly attendance: AttendanceService) {}
+  constructor(@Inject(AttendanceService) private readonly attendance: AttendanceService) {}
 
   @Get()
   @Roles("admin", "dept_head", "employee", "payroll_officer")

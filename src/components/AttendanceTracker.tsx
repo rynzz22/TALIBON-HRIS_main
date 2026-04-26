@@ -1,25 +1,52 @@
-import React, { useState } from 'react';
-import { Clock, Fingerprint, Calendar as CalendarIcon, CheckCircle2, AlertCircle, Navigation, ChevronRight, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Clock, Fingerprint, Calendar as CalendarIcon, CheckCircle2, AlertCircle, Navigation, ChevronRight, ArrowUpRight, ArrowDownLeft, Users, UserMinus, Search } from 'lucide-react';
 import { motion } from 'motion/react';
-import { format } from 'date-fns';
+import { format, isSameDay } from 'date-fns';
 import { cn, formatDate } from '../lib/utils';
-import { AttendanceRecord, Role } from '../types';
+import { AttendanceRecord, Role, Employee } from '../types';
 
 interface AttendanceTrackerProps {
   records: AttendanceRecord[];
+  employees: Employee[];
   currentUserRole: Role;
   onLog: (type: 'in' | 'out') => void;
 }
 
-export default function AttendanceTracker({ records, currentUserRole, onLog }: AttendanceTrackerProps) {
+export default function AttendanceTracker({ records, employees, currentUserRole, onLog }: AttendanceTrackerProps) {
   const [currentDate] = useState(new Date());
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const stats = {
-    today: records.filter(r => r.date === format(new Date(), 'yyyy-MM-dd')),
-    onTime: records.length ? Math.round((records.filter((r) => r.status === 'present').length / records.length) * 100) : 0,
-    late: records.filter((r) => r.status === 'late').length,
-    absent: records.filter((r) => r.status === 'absent').length
-  };
+  const stats = useMemo(() => {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const todayRecords = records.filter(r => r.date === today);
+    return {
+      today: todayRecords,
+      onTime: todayRecords.length ? Math.round((todayRecords.filter((r) => r.status === 'present').length / todayRecords.length) * 100) : 0,
+      late: todayRecords.filter((r) => r.status === 'late').length,
+      absent: todayRecords.filter((r) => r.status === 'absent').length,
+      undertime: todayRecords.filter((r) => r.status === 'undertime').length
+    };
+  }, [records]);
+
+  // Calculate live status for all employees for today
+  const liveWorkforce = useMemo(() => {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    return employees.map(emp => {
+      const record = records.find(r => r.employeeId === emp.id && r.date === today);
+      return {
+        ...emp,
+        record,
+        statusLabel: record ? record.status : 'disconnected',
+        isAnomalous: !record || (record && !record.timeOut) || record.status === 'undertime' || record.status === 'late'
+      };
+    }).filter(emp => 
+      emp.firstName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      emp.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      emp.id.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [employees, records, searchQuery]);
+
+  const isAdminOrDeptHead = currentUserRole === 'admin' || currentUserRole === 'dept_head';
 
   return (
     <div className="space-y-8 pb-32">
@@ -68,22 +95,13 @@ export default function AttendanceTracker({ records, currentUserRole, onLog }: A
                        <ArrowDownLeft size={18} /> Time-Out
                     </span>
                  </button>
-                 <button 
-                   onClick={() => {
-                     // Local clear action - could be refreshing or resetting a local state
-                     window.location.reload(); 
-                   }}
-                   className="px-8 py-5 bg-slate-200/50 text-slate-500 border border-slate-300/30 rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-xs transition-all hover:bg-slate-200/80 active:scale-95"
-                 >
-                    Clear
-                 </button>
               </div>
            </div>
         </div>
       )}
 
       {/* Admin/Dept Head Stats Grid */}
-      {currentUserRole !== 'employee' && (
+      {isAdminOrDeptHead && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
            <div className="glass-card p-6 rounded-3xl group transition-all hover:translate-y-[-4px]">
               <div className="flex justify-between items-start mb-6">
@@ -102,7 +120,7 @@ export default function AttendanceTracker({ records, currentUserRole, onLog }: A
                  </div>
                  <span className="text-[10px] font-black text-talibon-orange uppercase tracking-widest">Today</span>
               </div>
-              <h4 className="text-3xl font-black text-slate-800 mb-1">{stats.late}%</h4>
+              <h4 className="text-3xl font-black text-slate-800 mb-1">{stats.late}</h4>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Late Arrivals Today</p>
            </div>
            <div className="glass-card p-6 rounded-3xl group transition-all hover:translate-y-[-4px]">
@@ -112,8 +130,8 @@ export default function AttendanceTracker({ records, currentUserRole, onLog }: A
                  </div>
                  <span className="text-[10px] font-black text-talibon-red uppercase tracking-widest">Today</span>
               </div>
-              <h4 className="text-3xl font-black text-slate-800 mb-1">{stats.absent}%</h4>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Absence Rate</p>
+              <h4 className="text-3xl font-black text-slate-800 mb-1">{stats.undertime}</h4>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Undertime Alerts</p>
            </div>
            <div className="glass-card p-6 rounded-3xl group transition-all hover:translate-y-[-4px]">
               <div className="flex justify-between items-start mb-6">
@@ -125,6 +143,88 @@ export default function AttendanceTracker({ records, currentUserRole, onLog }: A
               <h4 className="text-3xl font-black text-slate-800 mb-1">{records.length}</h4>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Logs Processed</p>
            </div>
+        </div>
+      )}
+
+      {/* Live Workforce Status (Admin/Dept Head View) */}
+      {isAdminOrDeptHead && (
+        <div className="glass-panel rounded-[3rem] p-8 space-y-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h3 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                <Users className="text-talibon-red" size={20} />
+                Live Workforce Status
+              </h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Real-time daily monitoring & anomaly detection</p>
+            </div>
+            <div className="relative w-full md:w-72">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+              <input 
+                type="text"
+                placeholder="Search personnel..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white/50 border border-white/80 rounded-2xl py-2.5 pl-10 pr-4 text-xs focus:ring-2 focus:ring-talibon-red/20 outline-none transition-all"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {liveWorkforce.map((emp) => (
+              <motion.div 
+                layout
+                key={emp.id}
+                className={cn(
+                  "p-4 rounded-2xl border transition-all",
+                  emp.isAnomalous 
+                    ? "bg-talibon-red/5 border-talibon-red/10 border-l-4 border-l-talibon-red shadow-sm" 
+                    : "bg-white/40 border-white/60 shadow-sm"
+                )}
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white text-[10px] font-black uppercase">
+                    {emp.firstName[0]}{emp.lastName[0]}
+                  </div>
+                  <span className={cn(
+                    "px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-widest",
+                    emp.record ? (
+                      emp.record.status === 'present' ? "bg-emerald-500/10 text-emerald-600" :
+                      emp.record.status === 'late' ? "bg-talibon-orange/10 text-talibon-orange" :
+                      "bg-talibon-red/10 text-talibon-red"
+                    ) : "bg-slate-200 text-slate-400"
+                  )}>
+                    {emp.statusLabel}
+                  </span>
+                </div>
+                <h5 className="text-xs font-black text-slate-800 tracking-tight truncate">{emp.firstName} {emp.lastName}</h5>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">{emp.position}</p>
+                
+                <div className="flex items-center gap-3 mt-auto">
+                  <div className="flex-1 flex flex-col gap-1">
+                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none">In</span>
+                    <span className="text-[10px] font-black text-slate-700">{emp.record ? format(new Date(emp.record.timeIn), 'h:mm a') : '--:--'}</span>
+                  </div>
+                  <div className="flex-1 flex flex-col gap-1">
+                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none">Out</span>
+                    <span className="text-[10px] font-black text-slate-700">{emp.record?.timeOut ? format(new Date(emp.record.timeOut), 'h:mm a') : '--:--'}</span>
+                  </div>
+                </div>
+
+                {emp.isAnomalous && !emp.record && (
+                  <div className="mt-3 pt-3 border-t border-talibon-red/10 flex items-center gap-2 text-talibon-red">
+                    <UserMinus size={12} />
+                    <span className="text-[8px] font-black uppercase tracking-tighter">No logs detected today</span>
+                  </div>
+                )}
+                {emp.record && !emp.record.timeOut && (
+                  <div className="mt-3 pt-3 border-t border-talibon-red/10 flex items-center gap-2 text-talibon-orange">
+                    <Clock size={12} />
+                    <span className="text-[8px] font-black uppercase tracking-tighter">Pending Time-out Log</span>
+                  </div>
+                )}
+              </motion.div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -163,13 +263,13 @@ export default function AttendanceTracker({ records, currentUserRole, onLog }: A
                            <td className="px-6 py-5 text-[10px] font-bold text-slate-600">{formatDate(rec.date)}</td>
                            <td className="px-6 py-5">
                               <span className="px-3 py-1.5 bg-emerald-500/10 text-emerald-600 rounded-lg text-[10px] font-black uppercase tracking-widest">
-                                 {format(new Date(rec.timeIn), 'hh:mm a')}
+                                 {format(new Date(rec.timeIn), 'h:mm a')}
                               </span>
                            </td>
                            <td className="px-6 py-5">
                               {rec.timeOut ? (
                                  <span className="px-3 py-1.5 bg-talibon-orange/10 text-talibon-orange rounded-lg text-[10px] font-black uppercase tracking-widest">
-                                    {format(new Date(rec.timeOut), 'hh:mm a')}
+                                    {format(new Date(rec.timeOut), 'h:mm a')}
                                  </span>
                               ) : (
                                  <span className="px-3 py-1.5 bg-slate-900/5 text-slate-400 rounded-lg text-[9px] font-black uppercase tracking-widest">Active</span>
@@ -181,7 +281,8 @@ export default function AttendanceTracker({ records, currentUserRole, onLog }: A
                                  "px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border",
                                  rec.status === 'present' ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" :
                                  rec.status === 'late' ? "bg-talibon-orange/10 text-talibon-orange border-talibon-orange/20" :
-                                 "bg-talibon-red/10 text-talibon-red border-talibon-red/20"
+                                 rec.status === 'undertime' ? "bg-talibon-red/10 text-talibon-red border-talibon-red/20" :
+                                 "bg-slate-200 text-slate-400 border-slate-300"
                               )}>
                                  {rec.status}
                               </span>
@@ -196,3 +297,4 @@ export default function AttendanceTracker({ records, currentUserRole, onLog }: A
     </div>
   );
 }
+

@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Injectable, Module, Param, Post, Put, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Inject, Injectable, Module, Param, Post, Put, UseGuards } from "@nestjs/common";
 import { IsEmail, IsEnum, IsNumber, IsOptional, IsString } from "class-validator";
 import type { Department, Employee, Role } from "../types";
 import { AuthGuard } from "./common/auth.guard";
@@ -31,7 +31,7 @@ class UpdateEmployeeDto {
 @Injectable()
 class EmployeeService {
   private fallback: Employee[] = [];
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(@Inject(SupabaseService) private readonly supabase: SupabaseService) {}
 
   async findAll() {
     const client = this.supabase.getClient();
@@ -84,7 +84,7 @@ class EmployeeService {
 @Controller("api/employees")
 @UseGuards(AuthGuard, RolesGuard)
 class EmployeeController {
-  constructor(private readonly employees: EmployeeService) {}
+  constructor(@Inject(EmployeeService) private readonly employees: EmployeeService) {}
 
   @Get()
   @Roles("admin", "dept_head", "payroll_officer")

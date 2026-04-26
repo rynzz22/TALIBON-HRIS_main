@@ -245,9 +245,10 @@ export default function App() {
               {activeTab === 'attendance' && (
                 <AttendanceTracker 
                   records={attendanceRecords} 
+                  employees={employees}
                   currentUserRole={currentUserRole}
                   onLog={(type) =>
-                    AttendanceAPI.log(authUser.userId, type).then(() => queryClient.invalidateQueries({ queryKey: ['attendance'] }))
+                    AttendanceAPI.log(authUser!.userId, type).then(() => queryClient.invalidateQueries({ queryKey: ['attendance'] }))
                   }
                 />
               )}

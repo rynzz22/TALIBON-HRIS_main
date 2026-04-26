@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UsePipes, ValidationPipe } from "@nestjs/common";
+import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from "@nestjs/common";
 import { wrap } from "../common/response";
 import { LoginDto } from "./auth.dto";
 import { AuthService } from "./auth.service";
@@ -6,7 +6,7 @@ import { AuthService } from "./auth.service";
 @Controller("api/auth")
 @UsePipes(new ValidationPipe({ transform: true }))
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
 
   @Post("login")
   login(@Body() dto: LoginDto) {

@@ -1,4 +1,4 @@
-import { Controller, Get, Injectable, Module, UseGuards } from "@nestjs/common";
+import { Controller, Get, Inject, Injectable, Module, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "./common/auth.guard";
 import { wrap } from "./common/response";
 import { Roles } from "./common/roles";
@@ -7,7 +7,7 @@ import { SupabaseService } from "./supabase.service";
 
 @Injectable()
 class ReportsService {
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(@Inject(SupabaseService) private readonly supabase: SupabaseService) {}
 
   async summary() {
     const client = this.supabase.getClient();
@@ -38,7 +38,7 @@ class ReportsService {
 @Controller("api/reports")
 @UseGuards(AuthGuard, RolesGuard)
 class ReportsController {
-  constructor(private readonly reports: ReportsService) {}
+  constructor(@Inject(ReportsService) private readonly reports: ReportsService) {}
 
   @Get("summary")
   @Roles("admin", "dept_head", "payroll_officer")
