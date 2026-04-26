@@ -16,9 +16,9 @@ export default function AttendanceTracker({ records, currentUserRole, onLog }: A
 
   const stats = {
     today: records.filter(r => r.date === format(new Date(), 'yyyy-MM-dd')),
-    onTime: 85, // Mock percentage
-    late: 12,
-    absent: 3
+    onTime: records.length ? Math.round((records.filter((r) => r.status === 'present').length / records.length) * 100) : 0,
+    late: records.filter((r) => r.status === 'late').length,
+    absent: records.filter((r) => r.status === 'absent').length
   };
 
   return (
@@ -100,7 +100,7 @@ export default function AttendanceTracker({ records, currentUserRole, onLog }: A
                  <div className="w-12 h-12 bg-talibon-orange/10 rounded-2xl flex items-center justify-center text-talibon-orange group-hover:bg-talibon-orange group-hover:text-white transition-all">
                     <Clock size={24} />
                  </div>
-                 <span className="text-[10px] font-black text-talibon-orange uppercase tracking-widest">12 Personnel</span>
+                 <span className="text-[10px] font-black text-talibon-orange uppercase tracking-widest">Today</span>
               </div>
               <h4 className="text-3xl font-black text-slate-800 mb-1">{stats.late}%</h4>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Late Arrivals Today</p>
@@ -110,7 +110,7 @@ export default function AttendanceTracker({ records, currentUserRole, onLog }: A
                  <div className="w-12 h-12 bg-talibon-red/10 rounded-2xl flex items-center justify-center text-talibon-red group-hover:bg-talibon-red group-hover:text-white transition-all">
                     <AlertCircle size={24} />
                  </div>
-                 <span className="text-[10px] font-black text-talibon-red uppercase tracking-widest">3 Missing</span>
+                 <span className="text-[10px] font-black text-talibon-red uppercase tracking-widest">Today</span>
               </div>
               <h4 className="text-3xl font-black text-slate-800 mb-1">{stats.absent}%</h4>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Absence Rate</p>
@@ -122,7 +122,7 @@ export default function AttendanceTracker({ records, currentUserRole, onLog }: A
                  </div>
                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Live Feed</span>
               </div>
-              <h4 className="text-3xl font-black text-slate-800 mb-1">204</h4>
+              <h4 className="text-3xl font-black text-slate-800 mb-1">{records.length}</h4>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Logs Processed</p>
            </div>
         </div>

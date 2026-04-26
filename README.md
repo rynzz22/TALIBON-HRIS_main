@@ -2,19 +2,29 @@
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# Run and deploy your AI Studio app
+# TALIBON HRIS MVP
 
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/ea593ae0-7616-4d67-b48d-6dc6593d9929
+Municipal HRIS MVP built with React, NestJS, and Supabase.
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
+1. Install dependencies: `npm install`
+2. Copy `.env.example` to `.env` and set required values
+3. Start app and API: `npm run dev`
 
+## Seeded Login Accounts
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+- `admin@talibon.gov.ph / admin123`
+- `dept.head@talibon.gov.ph / depthead123`
+- `payroll@talibon.gov.ph / payroll123`
+- `employee@talibon.gov.ph / employee123`
+
+## Database Setup
+
+- Apply SQL under `supabase/migrations/001_hirs_mvp_schema.sql`
+- Ensure tables are available before enabling production mode
+
+## QA and Deployment
+
+- UAT checklist: `docs/uat-checklist.md`
+- Deployment checklist: `docs/deployment-checklist.md`

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { LeaveRequest, Employee } from '../types';
 import { Plus, X, Check, Loader2, Calendar, FileText, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { LeaveAPI } from '../lib/api';
 
 interface LeaveManagementProps {
   employees: Employee[];
@@ -26,9 +27,8 @@ export default function LeaveManagement({ employees, isAdmin }: LeaveManagementP
 
   const fetchRequests = async () => {
     try {
-      const res = await fetch('/api/leave');
-      const data = await res.json();
-      setRequests(data);
+      const res: any = await LeaveAPI.list();
+      setRequests(Array.isArray(res?.data) ? res.data : []);
     } catch (error) {
       console.error('Failed to fetch leave requests', error);
     } finally {
@@ -39,27 +39,17 @@ export default function LeaveManagement({ employees, isAdmin }: LeaveManagementP
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/leave', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...newRequest,
-          status: 'pending',
-          requestedAt: new Date().toISOString(),
-        }),
-      });
-      if (res.ok) {
-        setIsAdding(false);
-        fetchRequests();
-      }
+      await LeaveAPI.submit(newRequest);
+      setIsAdding(false);
+      fetchRequests();
     } catch (error) {
       console.error('Failed to submit leave request', error);
     }
   };
 
   const handleAction = async (id: string, status: 'approved' | 'rejected') => {
-    // For now, we'll just update locally as we don't have a PUT route yet
-    setRequests(prev => prev.map(r => r.id === id ? { ...r, status } : r));
+    await LeaveAPI.updateStatus(id, status);
+    fetchRequests();
   };
 
   return (

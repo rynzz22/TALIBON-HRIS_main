@@ -7,6 +7,22 @@ const api = axios.create({
   },
 });
 
+const TOKEN_KEY = 'hris_auth_token';
+
+export const AuthStorage = {
+  getToken: () => localStorage.getItem(TOKEN_KEY),
+  setToken: (token: string) => localStorage.setItem(TOKEN_KEY, token),
+  clear: () => localStorage.removeItem(TOKEN_KEY),
+};
+
+api.interceptors.request.use((config) => {
+  const token = AuthStorage.getToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 // Standardized response interception for enterprise error handling
 api.interceptors.response.use(
   (response) => response.data,
@@ -22,6 +38,10 @@ export const EmployeeAPI = {
   create: (data: any) => api.post('/employees', data),
   update: (id: string, data: any) => api.put(`/employees/${id}`, data),
   delete: (id: string) => api.delete(`/employees/${id}`),
+};
+
+export const AuthAPI = {
+  login: (email: string, password: string) => api.post('/auth/login', { email, password }),
 };
 
 export const PayrollAPI = {
@@ -50,6 +70,10 @@ export const AuditAPI = {
 
 export const NotificationAPI = {
   list: (userId: string) => api.get(`/notifications/${userId}`),
+};
+
+export const ReportsAPI = {
+  summary: () => api.get('/reports/summary'),
 };
 
 export default api;

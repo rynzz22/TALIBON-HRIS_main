@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { 
   LayoutDashboard, Users, CreditCard, Plus, Trash2, Edit2, Search, Building2, 
   Calendar, Mail, DollarSign, ChevronRight, LogIn, Shield, UserCircle, 
@@ -6,8 +6,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Employee, PayrollRecord, DEPARTMENTS, Role } from './types';
-import { EmployeeAPI } from './lib/api';
+import { Employee, Role } from './types';
+import { AuthAPI, AuthStorage, EmployeeAPI } from './lib/api';
 import { cn, formatDate } from './lib/utils';
 
 // Components
@@ -17,27 +17,35 @@ import Dashboard from './components/Dashboard';
 import LeaveManagement from './components/LeaveManagement';
 import AttendanceTracker from './components/AttendanceTracker';
 import AuditLogs from './components/AuditLogs';
-import { AttendanceAPI, AuditAPI, NotificationAPI } from './lib/api';
+import { AttendanceAPI, AuditAPI } from './lib/api';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'employees' | 'payroll' | 'leave' | 'attendance' | 'audit'>('dashboard');
-  const [currentUserRole, setCurrentUserRole] = useState<Role>('admin');
+  const [authUser, setAuthUser] = useState<{ userId: string; email: string; role: Role } | null>(null);
+  const [authError, setAuthError] = useState('');
+  const [credentials, setCredentials] = useState({ email: 'admin@talibon.gov.ph', password: 'admin123' });
   const queryClient = useQueryClient();
+
+  const currentUserRole = authUser?.role ?? 'employee';
+  const isAuthenticated = !!authUser;
 
   // Enterprise Data Orchestration
   const { data: employeeResponse, isLoading: employeeLoading } = useQuery({
     queryKey: ['employees'],
     queryFn: () => EmployeeAPI.list(),
+    enabled: isAuthenticated,
   });
 
   const { data: attendanceResponse } = useQuery({
     queryKey: ['attendance'],
     queryFn: () => AttendanceAPI.list(),
+    enabled: isAuthenticated,
   });
 
   const { data: auditResponse } = useQuery({
     queryKey: ['audit'],
     queryFn: () => AuditAPI.list(),
+    enabled: isAuthenticated && currentUserRole === 'admin',
   });
 
   const employees = Array.isArray(employeeResponse?.data) ? employeeResponse.data : [];
@@ -71,11 +79,58 @@ export default function App() {
     updateMutation.mutate({ id, data });
   };
 
-  const cycleRole = () => {
-    const roles: Role[] = ['admin', 'dept_head', 'employee', 'payroll_officer'];
-    const nextIndex = (roles.indexOf(currentUserRole) + 1) % roles.length;
-    setCurrentUserRole(roles[nextIndex]);
+  const loginMutation = useMutation({
+    mutationFn: () => AuthAPI.login(credentials.email, credentials.password),
+    onSuccess: (res: any) => {
+      AuthStorage.setToken(res.data.token);
+      setAuthUser(res.data.user);
+      setAuthError('');
+    },
+    onError: (err: Error) => setAuthError(err.message),
+  });
+
+  const handleLogout = () => {
+    AuthStorage.clear();
+    setAuthUser(null);
+    queryClient.clear();
   };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100 p-6">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            loginMutation.mutate();
+          }}
+          className="w-full max-w-md bg-white rounded-3xl p-8 shadow-xl space-y-5"
+        >
+          <h1 className="text-2xl font-black tracking-tight text-slate-900">HRIS Secure Login</h1>
+          <p className="text-xs uppercase tracking-wider text-slate-500 font-bold">Use seeded accounts to continue.</p>
+          <input
+            className="w-full border rounded-xl px-4 py-3"
+            type="email"
+            value={credentials.email}
+            onChange={(e) => setCredentials((prev) => ({ ...prev, email: e.target.value }))}
+            placeholder="Email"
+            required
+          />
+          <input
+            className="w-full border rounded-xl px-4 py-3"
+            type="password"
+            value={credentials.password}
+            onChange={(e) => setCredentials((prev) => ({ ...prev, password: e.target.value }))}
+            placeholder="Password"
+            required
+          />
+          {authError ? <p className="text-xs font-bold text-red-600">{authError}</p> : null}
+          <button className="w-full rounded-xl bg-slate-900 text-white py-3 font-black uppercase tracking-wider text-xs">
+            {loginMutation.isPending ? 'Signing in...' : 'Sign in'}
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen font-sans text-slate-900 overflow-hidden relative">
@@ -128,12 +183,14 @@ export default function App() {
            <div className="w-8 h-8 flex items-center justify-center text-white/20">
               <div className="h-4 w-[1px] bg-white/10"></div>
            </div>
-           <div 
-             onClick={cycleRole}
-             className="w-8 h-8 bg-talibon-orange rounded-full flex items-center justify-center text-white text-[8px] font-black cursor-pointer hover:scale-110 transition-all border-2 border-white/10 uppercase"
+           <div
+             className="w-8 h-8 bg-talibon-orange rounded-full flex items-center justify-center text-white text-[8px] font-black border-2 border-white/10 uppercase"
            >
               {currentUserRole.slice(0,2)}
            </div>
+           <button onClick={handleLogout} className="w-8 h-8 flex items-center justify-center text-white/60 hover:text-white">
+              <LogOut size={14} />
+           </button>
         </div>
       </header>
 
@@ -189,7 +246,9 @@ export default function App() {
                 <AttendanceTracker 
                   records={attendanceRecords} 
                   currentUserRole={currentUserRole}
-                  onLog={(type) => AttendanceAPI.log('1', type).then(() => queryClient.invalidateQueries({ queryKey: ['attendance'] }))}
+                  onLog={(type) =>
+                    AttendanceAPI.log(authUser.userId, type).then(() => queryClient.invalidateQueries({ queryKey: ['attendance'] }))
+                  }
                 />
               )}
               {activeTab === 'payroll' && (currentUserRole === 'admin' || currentUserRole === 'payroll_officer') && (

@@ -3,6 +3,8 @@ import { DollarSign, Download, Search, CheckCircle2, AlertCircle, Calendar, Cred
 import { Employee, PayrollRecord } from '../types';
 import { formatCurrency, formatDate, cn } from '../lib/utils';
 import { motion } from 'motion/react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { PayrollAPI } from '../lib/api';
 
 interface PayrollProps {
   employees: Employee[];
@@ -10,6 +12,16 @@ interface PayrollProps {
 
 export default function PayrollManagement({ employees }: PayrollProps) {
   const [payPeriod, setPayPeriod] = useState('2026-04-15');
+  const queryClient = useQueryClient();
+  const { data: payrollResponse } = useQuery({
+    queryKey: ['payroll'],
+    queryFn: () => PayrollAPI.list(),
+  });
+  const payrollRows = Array.isArray((payrollResponse as any)?.data) ? (payrollResponse as any).data : [];
+  const generateMutation = useMutation({
+    mutationFn: (payload: any) => PayrollAPI.generate(payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['payroll'] }),
+  });
   
   const totalGross = employees.reduce((acc, emp) => acc + (emp.salary || 0), 0);
   const totalDeductions = totalGross * 0.12; // 12% statutory
@@ -127,7 +139,21 @@ export default function PayrollManagement({ employees }: PayrollProps) {
                             </td>
                             <td className="px-6 py-6 font-mono font-black text-slate-900 text-lg">{formatCurrency(net)}</td>
                             <td className="px-8 py-6 text-right">
-                              <button className="px-6 py-2 bg-emerald-500/10 text-emerald-700 rounded-full font-black text-[10px] uppercase tracking-widest border border-emerald-500/10 hover:bg-emerald-500 hover:text-white transition-all shadow-sm backdrop-blur-md active:scale-95">
+                              <button
+                                onClick={() =>
+                                  generateMutation.mutate({
+                                    employeeId: emp.id,
+                                    period: payPeriod,
+                                    basicSalary: basic,
+                                    overtimePay: overtime,
+                                    grossPay: basic + overtime,
+                                    netPay: net,
+                                    status: 'approved',
+                                    deductions: { sss, philhealth, pagibig, tax, latePenalty: 0 },
+                                  })
+                                }
+                                className="px-6 py-2 bg-emerald-500/10 text-emerald-700 rounded-full font-black text-[10px] uppercase tracking-widest border border-emerald-500/10 hover:bg-emerald-500 hover:text-white transition-all shadow-sm backdrop-blur-md active:scale-95"
+                              >
                                 Release & PDF
                               </button>
                             </td>
@@ -138,6 +164,9 @@ export default function PayrollManagement({ employees }: PayrollProps) {
           </table>
         </div>
       </div>
+      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+        Saved payroll records this period: {payrollRows.length}
+      </p>
     </div>
   );
 }

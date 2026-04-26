@@ -2,6 +2,8 @@ import { Employee, DEPARTMENTS, Role } from '../types';
 import { Users, Building2, TrendingUp, CalendarDays, ArrowUpRight, ArrowDownRight, ShieldCheck, Activity } from 'lucide-react';
 import { formatCurrency, formatDate, cn } from '../lib/utils';
 import { motion } from 'motion/react';
+import { useQuery } from '@tanstack/react-query';
+import { ReportsAPI } from '../lib/api';
 
 interface DashboardProps {
   employees: Employee[];
@@ -10,11 +12,17 @@ interface DashboardProps {
 
 export default function Dashboard({ employees = [], userRole }: DashboardProps) {
   const safeEmployees = Array.isArray(employees) ? employees : [];
+  const { data: summaryResponse } = useQuery({
+    queryKey: ['reports-summary'],
+    queryFn: () => ReportsAPI.summary(),
+    enabled: userRole !== 'employee',
+  });
+  const summary = (summaryResponse as any)?.data ?? {};
   
   const adminStats = [
     { 
       label: 'Total Personnel', 
-      value: safeEmployees.length, 
+      value: summary.employees ?? safeEmployees.length,
       sub: '+2 this month', 
       trend: 'up',
       icon: Users, 
@@ -32,7 +40,7 @@ export default function Dashboard({ employees = [], userRole }: DashboardProps) 
     },
     { 
       label: 'Pending Approvals', 
-      value: '14', 
+      value: String(summary.pendingLeave ?? 0),
       sub: 'Leaves & Corrections', 
       trend: 'up',
       icon: ShieldCheck, 
@@ -41,7 +49,7 @@ export default function Dashboard({ employees = [], userRole }: DashboardProps) 
     },
     { 
       label: 'Active Workforce', 
-      value: '98.5%', 
+      value: `${summary.attendanceToday ?? 0}`,
       sub: 'Attendance Score', 
       trend: 'up',
       icon: Activity, 
